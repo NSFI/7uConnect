@@ -3,7 +3,7 @@
  */
 var debug = require('debug')('QiyuConnect');
 var pkg = require('../package.json');
-var JsSIP = require('jssip');
+var JsSIP = require('qiyujssip');
 var deepmerge = require('deepmerge');
 
 

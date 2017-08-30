@@ -40,6 +40,6 @@
   "dependencies": {
     "debug": "^3.0.1",
     "deepmerge": "^1.5.1",
-    "jssip": "^3.0.13"
+    "qiyujssip": "git+https://github.com/morrain/JsSIP.git"
   }
 }
