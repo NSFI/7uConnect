@@ -28,7 +28,7 @@ var rename = require('gulp-rename');
 var jshint = require('gulp-jshint');
 
 //生成sourcemaps
-var sourcemaps = require('gulp-sourcemaps');
+//var sourcemaps = require('gulp-sourcemaps');
 
 //打包成浏览器使用的版本
 var browserify = require('browserify');
@@ -69,9 +69,7 @@ gulp.task('uglify', function() {
 
 	return gulp.src(src)
 		.pipe(expect(EXPECT_OPTIONS, src))
-		.pipe(sourcemaps.init({loadMaps: true}))
 		.pipe(uglify())
-		.pipe(sourcemaps.write())
 		.pipe(header(BANNER, BANNER_OPTIONS))
 		.pipe(rename(PKG.name + '.min.js'))
 		.pipe(gulp.dest('dist/'));
