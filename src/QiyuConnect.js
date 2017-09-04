@@ -20,7 +20,8 @@ var QiyuConnect = module.exports = {
     mute: mute,
     unmute: unmute,
     sendDigit: sendDigit,
-    debug: require('debug')
+    debug: require('debug'),
+    stats: require('./stats.js') //统计当前链接的运行数据
 };
 
 Object.defineProperties(QiyuConnect, {
