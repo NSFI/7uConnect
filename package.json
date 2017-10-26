@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "debug": "^3.0.1",
-    "debugwebrtc": "^1.0.5",
+    "debugwebrtc": "^1.0.7",
     "deepmerge": "^1.5.1",
     "qiyujssip": "git+https://github.com/morrain/JsSIP.git"
   }
