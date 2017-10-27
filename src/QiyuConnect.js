@@ -1,13 +1,52 @@
 /**
  * Dependencies.
  */
-var debug = require('debug')('QiyuConnect');
+
 var pkg = require('../package.json');
 var JsSIP = require('qiyujssip');
+var debug = JsSIP.debug('QiyuConnect');
+var debugStats = JsSIP.debug('QiyuConnect:Stats');
 var deepmerge = require('deepmerge');
 
 
 debug('version %s', pkg.version);
+
+
+//webrtc信息统计
+var DebugWebRTC = require('debugwebrtc');
+var debugwebrtc = null;
+var stats = {
+    startStats: function(peer) {
+        if (!peer) {
+            return;
+        }
+
+        debugwebrtc = new DebugWebRTC({
+            peer: peer
+        });
+
+        debugwebrtc.on(DebugWebRTC.PARSERS.PARSER_CHECK_AUDIO_TRACKS, function(audio) {
+            debugStats('audio data: %j', audio);
+        });
+        debugwebrtc.on(DebugWebRTC.PARSERS.PARSER_GET_CONNECTION, function(connection) {
+            debugStats('connection data: %j', connection);
+        });
+
+        debugwebrtc.on(DebugWebRTC.PARSERS.PARSER_GET_STREAMS, function(stream) {
+            debugStats('stream data: %j', stream);
+        });
+
+        debugwebrtc.on(DebugWebRTC.TYPES.TYPE_ALL, function(results) {
+            JsSIP.debug('QiyuConnect:Stats:ALL')('all data: %j', results);
+        });
+
+    },
+    stopStats: function() {
+        if (debugwebrtc) {
+            debugwebrtc.destroy();
+        }
+    }
+};
 
 var QiyuConnect = module.exports = {
     Utils: JsSIP.Utils,
@@ -20,8 +59,8 @@ var QiyuConnect = module.exports = {
     mute: mute,
     unmute: unmute,
     sendDigit: sendDigit,
-    debug: require('debug'),
-    stats: require('./stats.js') //统计当前链接的运行数据
+    debug: JsSIP.debug,
+    stats: stats
 };
 
 Object.defineProperties(QiyuConnect, {
