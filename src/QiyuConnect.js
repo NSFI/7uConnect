@@ -77,6 +77,7 @@ function login(options) {
         }, options.ua, true));
 
         ua.registrator().setExtraHeaders(options.extraHeaders);
+        ua.start();
 
         ua.on('connecting', on('connecting'));
         ua.on('connected', on('connected'));
