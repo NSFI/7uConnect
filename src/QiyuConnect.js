@@ -76,7 +76,9 @@ function login(options) {
             sockets: new JsSIP.WebSocketInterface(options.url)
         }, options.ua, true));
 
-        ua.registrator().setExtraHeaders(options.extraHeaders);
+
+        ua.__extraHeaders = options.extraHeaders; //缓存extraHeaders信息，其它接口使用
+        ua.registrator().setExtraHeaders(ua.__extraHeaders);
         ua.start();
 
         ua.on('connecting', on('connecting'));
@@ -98,7 +100,7 @@ function login(options) {
  */
 function call(target, options) {
     return this.ua.call(target, deepmerge(options || {}, {
-        extraHeaders: this.ua.registrator().extraHeaders.slice()
+        extraHeaders: this.ua.__extraHeaders.slice()
     }));
 }
 /**
@@ -106,13 +108,13 @@ function call(target, options) {
  */
 function answer(session, options) {
     session.answer(deepmerge(options || {}, {
-        extraHeaders: this.ua.registrator().extraHeaders.slice()
+        extraHeaders: this.ua.__extraHeaders.slice()
     }));
 }
 
 function bye(session, options) {
     session.terminate(deepmerge(options || {}, {
-        extraHeaders: this.ua.registrator().extraHeaders.slice()
+        extraHeaders: this.ua.__extraHeaders.slice()
     }));
 }
 /**
@@ -125,7 +127,7 @@ function bye(session, options) {
  */
 function hold(session, options, done) {
     session.hold(deepmerge(options || {}, {
-        extraHeaders: this.ua.registrator().extraHeaders.slice()
+        extraHeaders: this.ua.__extraHeaders.slice()
     }), done);
 }
 /**
@@ -138,7 +140,7 @@ function hold(session, options, done) {
  */
 function unhold(session, options, done) {
     session.unhold(deepmerge(options || {}, {
-        extraHeaders: this.ua.registrator().extraHeaders.slice()
+        extraHeaders: this.ua.__extraHeaders.slice()
     }), done);
 }
 
