@@ -17379,8 +17379,8 @@ module.exports = function (_EventEmitter) {
       this._connection.addEventListener('iceconnectionstatechange', function () {
         var state = _this13._connection.iceConnectionState;
 
-        // TODO: Do more with different states.
-        if (state === 'failed') {
+        // TODO: Do more with different states.//当hold时，rtp会超时，此时不发结束会话
+        if (state === 'failed' && !_this13._remoteHold) {
           _this13.terminate({
             cause: JsSIP_C.causes.RTP_TIMEOUT,
             status_code: 408,
@@ -24874,8 +24874,8 @@ module.exports={
     "test": "gulp test",
     "prepublishOnly": "gulp babel"
   },
-  "_from": "jssip@3.2.4",
-  "_resolved": "http://registry.npm.taobao.org/jssip/download/jssip-3.2.4.tgz"
+  "_from": "qiyujssip@git+https://github.com/NSFI/JsSIP.git",
+  "_resolved": "https://github.com/NSFI/JsSIP.git#master"
 }
 },{}],38:[function(require,module,exports){
 /**
