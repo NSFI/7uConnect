@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/morrain/7uConnect.git"
+    "url": "git+https://github.com/NSFI/7uConnect.git"
   },
   "keywords": [
     "qiyu",
@@ -20,9 +20,9 @@
   "author": "Morrain",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/morrain/7uConnect/issues"
+    "url": "https://github.com/NSFI/7uConnect/issues"
   },
-  "homepage": "https://github.com/morrain/7uConnect#readme",
+  "homepage": "https://github.com/NSFI/7uConnect#readme",
   "devDependencies": {
     "babel-preset-es2015": "^6.24.1",
     "babelify": "7.3.0",
