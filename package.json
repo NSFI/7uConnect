@@ -42,6 +42,6 @@
   "dependencies": {
     "debugwebrtc": "^1.0.7",
     "deepmerge": "^1.5.1",
-    "qiyujssip": "git+https://github.com/NSFI/JsSIP.git"
+    "qiyujssip": "git+https://github.com/morrain/JsSIP.git"
   }
 }
