@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.QiyuConnect = f()}})(function(){var define,module,exports;return (function(){function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s}return e})()({1:[function(require,module,exports){
+(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.QiyuConnect = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
 (function (process){
 /**
  * This is the web browser implementation of `debug()`.
@@ -1375,7 +1375,7 @@ var normalice = require('normalice');
 
 **/
 
-var freeice = module.exports = function(opts) {
+var freeice = function(opts) {
   // if a list of servers has been provided, then use it instead of defaults
   var servers = {
     stun: (opts || {}).stun || require('./stun.json'),
@@ -1416,6 +1416,7 @@ var freeice = module.exports = function(opts) {
   return selected;
 };
 
+module.exports = freeice;
 },{"./stun.json":7,"./turn.json":8,"normalice":11}],7:[function(require,module,exports){
 module.exports=[
   "stun.l.google.com:19302",
@@ -1430,8 +1431,7 @@ module.exports=[
   "stun.voiparound.com",
   "stun.voipbuster.com",
   "stun.voipstunt.com",
-  "stun.voxgratia.org",
-  "stun.services.mozilla.com"
+  "stun.voxgratia.org"
 ]
 
 },{}],8:[function(require,module,exports){
@@ -17043,7 +17043,7 @@ function createLocalDescription(type, onSuccess, onFailure, constraints) {
 
     connection.setLocalDescription(desc)
       .then(function() {
-        if (connection.iceGatheringState === 'complete') {
+        //if (connection.iceGatheringState === 'complete') {
           self.rtcReady = true;
 
           if (onSuccess) {
@@ -17055,7 +17055,7 @@ function createLocalDescription(type, onSuccess, onFailure, constraints) {
             onSuccess(e.sdp);
             onSuccess = null;
           }
-        }
+        //}
       })
       .catch(function(error) {
         self.rtcReady = true;
@@ -23887,6 +23887,29 @@ var grammar = module.exports = {
       names: ['filterMode', 'netType', 'addressTypes', 'destAddress', 'srcList'],
       format: 'source-filter: %s %s %s %s %s'
     },
+    { //a=bundle-only
+      name: 'bundleOnly',
+      reg: /^(bundle-only)/
+    },
+    { //a=label:1
+      name: 'label',
+      reg: /^label:(.+)/,
+      format: 'label:%s'
+    },
+    {
+      // RFC version 26 for SCTP over DTLS
+      // https://tools.ietf.org/html/draft-ietf-mmusic-sctp-sdp-26#section-5
+      name:'sctpPort',
+      reg: /^sctp-port:(\d+)$/,
+      format: 'sctp-port:%s'
+    },
+    {
+      // RFC version 26 for SCTP over DTLS
+      // https://tools.ietf.org/html/draft-ietf-mmusic-sctp-sdp-26#section-6
+      name:'maxMessageSize',
+      reg: /^max-message-size:(\d+)$/,
+      format: 'max-message-size:%s'
+    },
     { // any a= that we don't understand is kepts verbatim on media.invalid
       push: 'invalid',
       names: ['value']
@@ -23990,6 +24013,8 @@ var paramReducer = function (acc, expr) {
   var s = expr.split(/=(.+)/, 2);
   if (s.length === 2) {
     acc[s[0]] = toIntIfInt(s[1]);
+  } else if (s.length === 1 && expr.length > 1) {
+    acc[s[0]] = undefined;
   }
   return acc;
 };
@@ -28280,10 +28305,11 @@ module.exports={
   },
   "homepage": "https://github.com/NSFI/7uConnect#readme",
   "devDependencies": {
+    "acorn": "^6.0.4",
     "babel-preset-es2015": "^6.24.1",
     "babelify": "7.3.0",
     "browserify": "^14.4.0",
-    "gulp": "git+https://github.com/gulpjs/gulp.git#4.0",
+    "gulp": "^4.0.0",
     "gulp-expect-file": "^0.0.7",
     "gulp-header": "^1.8.9",
     "gulp-jshint": "^2.0.4",
