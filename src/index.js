@@ -489,4 +489,4 @@ var Adaptor = {
   },
 };
 
-exports.module = Adaptor;
+window.QiyuAdaptor = exports.module = Adaptor;
