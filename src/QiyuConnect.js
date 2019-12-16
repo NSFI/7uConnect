@@ -51,7 +51,6 @@ Object.defineProperties(QiyuConnect, {
  *   @optinal param callback [Function] 回掉函数 arguments[0]:type 事件类型  
  *   @optinal param extraHeaders: Append custom headers to every REGISTER / un-REGISTER request. They can be overriden at any time.
  */
-
 function login(options) {
 
     /**
