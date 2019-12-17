@@ -28666,6 +28666,7 @@ function sendDigit(session, tone) {
 },{"../package.json":59,"debugwebrtc":3,"deepmerge":4,"qiyujssip":18}],61:[function(require,module,exports){
 // qiyuSIP
 var sipsdk = require('./QiyuConnect');
+var pkg = require('../package.json');
 
 var C = {
     STATUS_SUCCESS: 0, // READY 准备好
@@ -29133,6 +29134,7 @@ var Adaptor = {
    * @param {Function} eventHandle  事件处理
    * @param {[this]}   scope    注册模块，默认为当前模块
    */
+  EVENTS_CUSTOM: {},
   addEventMethod: function(eventType, eventHandle, scope) {
       if (typeof eventType === 'string') {
           this.EVENTS_CUSTOM[eventType] = function() {
@@ -29155,7 +29157,20 @@ var Adaptor = {
   },
 };
 
-window.QiyuAdaptor = module.exports  = Adaptor;
+var QiyuAdaptor = module.exports  = Adaptor;
 
-},{"./QiyuConnect":60}]},{},[61])(61)
+Object.defineProperties(QiyuAdaptor, {
+    name: {
+        get: function() {
+            return pkg.title;
+        }
+    },
+    version: {
+        get: function() {
+            return pkg.version;
+        }
+    }
+});
+
+},{"../package.json":59,"./QiyuConnect":60}]},{},[61])(61)
 });
