@@ -29155,7 +29155,7 @@ var Adaptor = {
   },
 };
 
-exports.module = Adaptor;
+window.QiyuAdaptor = module.exports  = Adaptor;
 
 },{"./QiyuConnect":60}]},{},[61])(61)
 });
