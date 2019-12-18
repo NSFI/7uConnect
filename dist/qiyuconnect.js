@@ -1,12 +1,12 @@
 /*
- * QiyuConnect v1.0.0
+ * QiyuAdaptor v1.0.0
  * qiyu callcenter sdk based on JsSIP
- * Copyright: 2017-2019 Morrain
+ * Copyright: 2017-2019 aline
  * Homepage: https://github.com/NSFI/7uConnect#readme
  * License: MIT
  */
 
-(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.QiyuConnect = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.QiyuAdaptor = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
 (function (process){
 /**
  * This is the web browser implementation of `debug()`.
@@ -28440,10 +28440,13 @@ module.exports = {
 },{}],59:[function(require,module,exports){
 module.exports={
   "name": "qiyuconnect",
-  "title": "QiyuConnect",
+  "title": "QiyuAdaptor",
   "version": "1.0.0",
+  "siptitle": "QiyuConnect",
+  "sipversion": "1.0.0",
   "description": "qiyu callcenter sdk based on JsSIP",
   "main": "./src/index.js",
+  "qmain": "./srcq/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -28457,7 +28460,7 @@ module.exports={
     "sdk",
     "jssip"
   ],
-  "author": "Morrain",
+  "author": "aline",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/NSFI/7uConnect/issues"
@@ -28483,7 +28486,7 @@ module.exports={
   "dependencies": {
     "debugwebrtc": "^1.0.7",
     "deepmerge": "^1.5.1",
-    "qiyujssip": "git+https://github.com/morrain/JsSIP.git"
+    "qiyujssip": "git+https://github.com/NSFI/JsSIP.git"
   }
 }
 
@@ -28519,12 +28522,12 @@ var QiyuConnect = module.exports = {
 Object.defineProperties(QiyuConnect, {
     name: {
         get: function() {
-            return pkg.title;
+            return pkg.siptitle;
         }
     },
     version: {
         get: function() {
-            return pkg.version;
+            return pkg.sipversion;
         }
     }
 });
@@ -28712,15 +28715,15 @@ var config = {
       password:  null, // required
       /* SIP account. */
       uri: {
-        // sip_portocol: null, // required
+        // sip_protocol: null, // required
         // username  : null,  // required
         // sip_domain: null,  // required
         // sip_transport: null,
-        portocol: 'sip:', // required
+        protocol: 'sip:', // required
         account: null, // required
         domain: '@cc.qiyukf.com'  // required
       },
-      portocol: null, // contant_uri -> transport ; ua sockets -> portocol
+      protocol: null, // contant_uri -> transport ; ua sockets -> protocol
       pcConfig: null,
       /* Connection options. */
       socket: {
@@ -28736,7 +28739,7 @@ var config = {
 
       /* bussiness corporation  */
       // bu_extraHeaders: {},
-      meida_whitelist: null, //
+      meida_whitelist: [], //
       corpCode: '',  // required
       appId: ''  // required
   },
@@ -28752,7 +28755,7 @@ var config = {
 
         /* SIP account. */
         // display_name : null,
-        uri        : null, //`sip:${username}${QiyuConfig.sip_url}` <= { portocol, account: null, domain: null , transport} 
+        uri        : null, //`sip:${username}${QiyuConfig.sip_url}` <= { protocol, account: null, domain: null , transport} 
         contact_uri: null,//sip:${calluser.username}${QiyuConfig.sip_url};transport=${location.protocol.replace('http', 'ws').replace(':','')}`
 
         /* Session parameters. */
@@ -28766,7 +28769,7 @@ var config = {
         // registrar_server : null,
 
         /* Connection options. */
-        sockets                          : null,
+        // sockets                          : null,
         // connection_recovery_max_interval : JsSIP_C.CONNECTION_RECOVERY_MAX_INTERVAL,
         // connection_recovery_min_interval : JsSIP_C.CONNECTION_RECOVERY_MIN_INTERVAL,
 
@@ -28783,7 +28786,7 @@ var config = {
       // -> navigator.mediaDevices.getUserMedia()
       // -> session._connecting(request) -> emit('connecting', {request})
       //- common
-        mediavarraints: { 
+        mediaConstraints: { 
           audio: true, 
           video: false // true
         },
@@ -28808,12 +28811,13 @@ var config = {
         // account: 'account', // required
         domain: '@cc.qiyukf.com'  // required
       }, src.uri);
-      var _uri = uri.portocol + uri.account + uri.domain;
+      var _uri = uri.protocol + uri.account + uri.domain;
       target.ua.uri = _uri;
-      var portocol = src.portocol || 'wss';//location.protocol.replace('http', 'ws').replace(':','');
-      target.ua.contact_uri = _uri+ ';transport='+portocol;
+      var protocol = src.protocol || 'wss';//location.protocol.replace('http', 'ws').replace(':','');
+      target.ua.contact_uri = _uri+ ';transport='+protocol;
       target.socket_lbs = src.socket_lbs;
       target.media_selectorId = src.media_selectorId;
+      target.meida_whitelist = src.meida_whitelist;
 
       return target;
   }
@@ -28856,8 +28860,6 @@ var SIPUAEventHandlers = {
         this.reconnect = 0;
         this.callingReconnect = false;
         log('ws服务连接成功');
-        // p.loginStatus = LOGIN_STATUS.CODE.SUCCESS;
-        // sipServer.nofity(false, { code: sipServerInfo.Code.SIP_SUCCESS});
     },
     disconnected: function(data){
         this.status =  C.STATUS_FAIL;
@@ -28929,6 +28931,7 @@ function socketDisconnectedNLB(data){
 }
 
 
+
 /* //用户自定义定制事件
 let EVENTS_CUSTOM = {
     //  'ringing', //来电事件
@@ -28938,14 +28941,15 @@ let EVENTS_CUSTOM = {
 }; */
 
 var Adaptor = {
+  SIPUAEventHandlers: SIPUAEventHandlers,
   sdk: sipsdk,
   _status: C.STATUS_INIT,
   getStatus: function(){
-    return this._status;
+    return this.status;
   },
   getCause: function(status) {
       if([null,undefined].includes(status)){
-        status = this._status;
+        status = this.status;
       }
       return C.Cause[status];
   },
@@ -28957,7 +28961,7 @@ var Adaptor = {
         //如果是pc端，通过PC接口检测权限
         if (window.cefQuery) {
             if (window.location.href.indexOf('https') === -1) {
-                adaptor._status = C.STATUS_UNSAFE;
+                adaptor.status = C.STATUS_UNSAFE;
                 return;
             }
             window._nativeApi.detectAudioDevice();
@@ -28976,40 +28980,45 @@ var Adaptor = {
                         debug('getUserMediaError %O', error);
 
                         if (error.name === 'NotAllowedError') {
-                            adaptor._status = C.STATUS_MIC_UN;
+                            adaptor.status = C.STATUS_MIC_UN;
                         } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-                            adaptor._status = C.STATUS_MIC_NOT;
+                            adaptor.status = C.STATUS_MIC_NOT;
                         } else if (error.name === 'NotSupportedError') {
-                            adaptor._status = C.STATUS_UNSAFE;
+                            adaptor.status = C.STATUS_UNSAFE;
                         }
                     });
             }catch(e){
                 // TypeError: Cannot read property 'getUserMedia' of undefined
                 if(location.protocol !== 'https:'){
-                    adaptor._status = C.STATUS_UNSAFE;
+                    adaptor.status = C.STATUS_UNSAFE;
                 }
                 console.log(e);
             }
         } 
   },
   start: function(configuration) {
-    var adaptor = this;
-    // this._configration = Object.assign({}, Config.settings);
+    // var adaptor = this;
     // Load configuration.
     try {
         this._loadConfig(configuration);
+        if(this.ua) {
+          this.ua.stop();
+        }
 
         sipsdk.login({
            ua: this._configration.ua,
            url: this._configration.socket_lbs,
-           callback: function(type, data) {
-             if(SIPUAEventHandlers.prototype.hasOwnProperty(type) &&
-                Object.prototype.toString.call(SIPUAEventHandlers[type]) === '[object Function]'
-              ){
-                SIPUAEventHandlers[type].bind(adaptor, data);
-             }
-           } 
+           callback: notifyQiyu,
+           extraHeaders: this._configration.extraHeaders
+          //  callback: function(type, data) {
+          //    if(SIPUAEventHandlers.hasOwnProperty(type) &&
+          //       Object.prototype.toString.call(SIPUAEventHandlers[type]) === '[object Function]'
+          //     ){
+          //       SIPUAEventHandlers[type](adaptor, data);
+          //    }
+          //  } 
         });
+        this.ua = sipsdk.ua;
 
       /* var config = {
         socket: this._configration.socket.nlb,
@@ -29022,7 +29031,7 @@ var Adaptor = {
       // this.adaptor.sdk.init(config);
         
     } catch (e) {
-        this._status = C.STATUS_NOT_READY;
+        this.status = C.STATUS_NOT_READY;
         this._error = C.CONFIGURATION_ERROR;
         throw e;
     }
@@ -29033,7 +29042,7 @@ var Adaptor = {
   //       /* SIP authentication. */
   //       password:  'password', // required
   //       uri: {
-  //         portocol: 'sip:', // required
+  //         protocol: 'sip:', // required
   //         account: 'account', // required
   //         domain: '@cc.qiyukf.com'  // required
   //       },
@@ -29076,15 +29085,15 @@ var Adaptor = {
       var retryCount = 0;//重试次数
       var retryTimer = null; //重试定时器
 
-      var  retryCorpWhiteList = this._configration.meida_whitelist; //this._configration.meida.whitelist;
+      var  retryCorpWhiteList = this._configration.meida_whitelist || []; //this._configration.meida.whitelist;
       var  TheCorp = this._configration.corpCode;
 
       debug('accept corpCode:%s', this._configration.corpCode);
        if (retryCorpWhiteList.includes(TheCorp)) {
           retryGetUserMedia();
       } else {// 非白名单直接接听处理 // 非someCode里定义的企业保持原有的逻辑
-        if(adaptor.session){
-          adaptor.sdk.answer(adaptor.session, answerOptions);
+        if(adaptor._session){
+          adaptor.sdk.answer(adaptor._session, answerOptions);
         }
       }
 
@@ -29125,7 +29134,7 @@ var Adaptor = {
   },
   bye: function() {
       var  adaptor = this;
-      adaptor.sdk.bye(adaptor.session);
+      adaptor.sdk.bye(adaptor._session);
   },
   /* Emitter */
   /**
@@ -29156,6 +29165,118 @@ var Adaptor = {
       }
   },
 };
+function notifyQiyu(type, data) {
+      debug('[notifyQiyu] type:%s, data:%O', type, data);
+      var adaptor = Adaptor, ua = adaptor.sdk.ua;
+      switch (type) {
+          case 'registered':
+              adaptor.status = C.STATUS_SUCCESS;
+              break;
+          case 'unregistered':
+              adaptor.status = C.STATUS_FAIL;
+              break;
+          case 'registrationFailed':
+              adaptor.status =  C.STATUS_FAIL;
+
+            // 连接状态  请求超时pending、响应超时 408、410、420、480  UNAVAILABLE 
+              // var isResistered = ua.isRegistered(); // 是否有注册成功过
+              var isConnected = ua.isConnected();
+
+              /* 连接状态 请求超时 */
+              var isResponseTimeout = data.cause && data.cause === 'UNAVAILABLE';
+              var isRequestTimeout = data.cause && data.cause === 'Request Timeout';
+              var isConnectTimeOut = isRequestTimeout || isResponseTimeout;
+              // 若是响应超时避免服务器集结压力过大做时间缓冲, 区间为5s
+              var isValidRegister = !this.timestampRegister || (Math.abs(Date.now() - this.timestampRegister)/1000 > 5);
+              if(isConnected && isConnectTimeOut && isValidRegister ) {
+                  this.timestampRegister = Date.now();
+                  log('ws服务注册失败-重试');
+                  ua.register();// 未注册成功过 或 注册成功过isResistered 则关闭 一个周期仅触发一次 ua.registered  ua.registrator.close();
+              } else {
+                  var isConnectError = data.cause && data.cause === 'Connection Error';
+                  this.uaConnectError = isConnectError;
+                  log('ws服务注册失败-重连 连接错误 %s', this.uaConnectError);
+              }
+              break;
+          case 'connected':
+              this.connected = true;
+              this.reconnect = 0;
+              this.callingReconnect = false;
+              break;
+          case 'disconnected':
+              adaptor.status =  C.STATUS_FAIL;
+              data = data || {};
+              debug('[disconnected] %O', {
+                  data: data,
+                  isConnected: ua.isConnected(),
+                  status: ua.status,
+                  ua: ua,
+              });
+
+              try {
+              // ①若连接成功过之后未连接成功  ②_uaConnectError 避免重复执行 ③ 避免服务器高并发请求集结做缓冲
+                var isValidConnect = !this._timestampConnect || (Math.abs(Date.now() - this._timestampConnect)/1000 > 1);
+                if(data.error && this._uaConnectError && this._connected && isValidConnect) {
+                        this._uaConnectError = 0;
+                        this._timestampConnect = Date.now();
+                        ua.start();
+                  }
+              } catch (e) {
+                  console.log('disconnect error');
+              }
+
+              break;
+          case 'newRTCSession':
+              if (data.originator === 'local') { return; }
+
+              var _session = data.session;
+              // Avoid if busy or other incoming
+              if (adaptor._session) {
+                  debug('[terminate] %O', { // debug
+                      status_code: 486,
+                      reason_phrase: 'Busy Here',
+                      session: _session
+                  });
+
+                  _session.terminate({
+                      status_code: 486,
+                      reason_phrase: 'Busy Here'
+                  });
+                  return;
+              }
+        
+              adaptor._session = _session;
+
+              adaptor.fireEvent('ringing', {
+                  type: data.request.hasHeader('Direction-Type') ? Number(data.request.getHeader('Direction-Type')) : 1
+              });
+
+                _session.on('accepted', function() {
+                        // window.document.getElementById('qiyuPhone') idSelector
+                    var nodePhone = window.document && (nodePhone = window.document.getElementById(adaptor._configration.media_selectorId));
+                    if (nodePhone) {
+                        // Display remote stream
+                        nodePhone.srcObject = _session.connection.getRemoteStreams()[0];
+                    }
+                    // stats.startStats(session.connection);
+                });
+                _session.on('ended', function() {
+                    debug('jssip:ended');
+
+                    // stats.stopStats();
+                    adaptor._session = null;
+                });
+                _session.on('failed', function() {
+                    debug('jssip:failed');
+                    // stats.stopStats();
+                    adaptor._session = null;
+                });
+
+              break;
+          default:
+              break;
+      }
+  }
 
 var QiyuAdaptor = module.exports  = Adaptor;
 

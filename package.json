@@ -1,9 +1,12 @@
 {
   "name": "qiyuconnect",
-  "title": "QiyuConnect",
+  "title": "QiyuAdaptor",
   "version": "1.0.0",
+  "siptitle": "QiyuConnect",
+  "sipversion": "1.0.0",
   "description": "qiyu callcenter sdk based on JsSIP",
   "main": "./src/index.js",
+  "qmain": "./srcq/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -17,7 +20,7 @@
     "sdk",
     "jssip"
   ],
-  "author": "Morrain",
+  "author": "aline",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/NSFI/7uConnect/issues"
@@ -43,6 +46,6 @@
   "dependencies": {
     "debugwebrtc": "^1.0.7",
     "deepmerge": "^1.5.1",
-    "qiyujssip": "git+https://github.com/morrain/JsSIP.git"
+    "qiyujssip": "git+https://github.com/NSFI/JsSIP.git"
   }
 }

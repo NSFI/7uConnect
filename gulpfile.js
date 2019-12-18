@@ -80,6 +80,41 @@ gulp.task('dist', gulp.series('lint', 'browserify', 'uglify'));
 gulp.task('default', gulp.series('dist'));
 
 
+gulp.task('lintQ', function() {
+	var srcq = ['gulpfile.js', 'srcq/index.js'];
+
+	return gulp.src(srcq)
+		.pipe(expect(EXPECT_OPTIONS, srcq))
+		.pipe(jshint('.jshintrc'))
+		.pipe(jshint.reporter('jshint-stylish', {verbose: true}))
+		.pipe(jshint.reporter('fail'));
+});
+
+gulp.task('browserifyQ', function() {
+	return browserify([path.join(__dirname, PKG.qmain)], {
+		standalone: PKG.title
+	}).bundle()
+		.pipe(vinyl_source_stream(PKG.name + '.js'))
+		.pipe(vinyl_buffer())
+		.pipe(header(BANNER, BANNER_OPTIONS))
+		.pipe(gulp.dest('distQ/'));
+});
+
+gulp.task('uglifyQ', function() {
+	var srcq = 'distQ/' + PKG.name + '.js';
+
+	return gulp.src(srcq)
+		.pipe(expect(EXPECT_OPTIONS, srcq))
+		.pipe(uglify())
+		.pipe(header(BANNER, BANNER_OPTIONS))
+		.pipe(rename(PKG.name + '.min.js'))
+		.pipe(gulp.dest('distQ/'));
+});
+
+
+gulp.task('distQ', gulp.series('lintQ', 'browserifyQ', 'uglifyQ'));
+
+
 
 
 
