@@ -45,7 +45,7 @@ const BANNER_OPTIONS = {
 
 
 gulp.task('lint', function() {
-	var src = ['gulpfile.js', 'src/*.js'];
+	var src = ['gulpfile.js', 'src/index.js'];
 
 	return gulp.src(src)
 		.pipe(expect(EXPECT_OPTIONS, src))

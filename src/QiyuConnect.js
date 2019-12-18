@@ -29,12 +29,12 @@ var QiyuConnect = module.exports = {
 Object.defineProperties(QiyuConnect, {
     name: {
         get: function() {
-            return pkg.title;
+            return pkg.siptitle;
         }
     },
     version: {
         get: function() {
-            return pkg.version;
+            return pkg.sipversion;
         }
     }
 });
