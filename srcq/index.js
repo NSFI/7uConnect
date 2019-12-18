@@ -209,9 +209,10 @@ var config = {
       target.ua.uri = _uri;
       var portocol = src.portocol || 'wss';//location.protocol.replace('http', 'ws').replace(':','');
       target.ua.contact_uri = _uri+ ';transport='+portocol;
-      target.socket_lbs = src.socket_lbs;
+      target.socket_nlb = src.socket_nlb;
       target.media_selectorId = src.media_selectorId;
       target.meida_whitelist = src.meida_whitelist;
+      target.corpCode = src.corpCode;
 
       return target;
   }
@@ -230,7 +231,7 @@ function init(configration){
             var _configration = adaptor._configration;
             var config = {
                 ua: _configration.ua,
-                url: _configration.socket_lbs, 
+                url: _configration.socket_nlb, 
                 extraHeaders: _configration.extraHeaders
             };
             console.log(_configration, config);
