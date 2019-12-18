@@ -17018,7 +17018,7 @@ function createLocalDescription(type, onSuccess, onFailure, constraints) {
 
     connection.setLocalDescription(desc)
       .then(function() {
-        //if (connection.iceGatheringState === 'complete') {
+        if (connection.iceGatheringState === 'complete') {
           self.rtcReady = true;
 
           if (onSuccess) {
@@ -17030,7 +17030,7 @@ function createLocalDescription(type, onSuccess, onFailure, constraints) {
             onSuccess(e.sdp);
             onSuccess = null;
           }
-        //}
+        }
       })
       .catch(function(error) {
         self.rtcReady = true;
@@ -23479,7 +23479,7 @@ function reply(status_code) {
 
 },{"./Constants":12,"./SIPMessage":30,"./Utils":37,"debug":1}],40:[function(require,module,exports){
 module.exports={
-  "_from": "git+https://github.com/morrain/JsSIP.git",
+  "_from": "git+https://github.com/NSFI/JsSIP.git#qiyu/3.14",
   "_id": "qiyujssip@3.0.13",
   "_inBundle": false,
   "_integrity": "",
@@ -23487,19 +23487,20 @@ module.exports={
   "_phantomChildren": {},
   "_requested": {
     "type": "git",
-    "raw": "qiyujssip@git+https://github.com/morrain/JsSIP.git",
+    "raw": "qiyujssip@git+https://github.com/NSFI/JsSIP.git#qiyu/3.14",
     "name": "qiyujssip",
     "escapedName": "qiyujssip",
-    "rawSpec": "git+https://github.com/morrain/JsSIP.git",
-    "saveSpec": "git+https://github.com/morrain/JsSIP.git",
-    "fetchSpec": "https://github.com/morrain/JsSIP.git",
-    "gitCommittish": null
+    "rawSpec": "git+https://github.com/NSFI/JsSIP.git#qiyu/3.14",
+    "saveSpec": "git+https://github.com/NSFI/JsSIP.git#qiyu/3.14",
+    "fetchSpec": "https://github.com/NSFI/JsSIP.git",
+    "gitCommittish": "qiyu/3.14"
   },
   "_requiredBy": [
+    "#USER",
     "/"
   ],
-  "_resolved": "git+https://github.com/morrain/JsSIP.git#9d6d8ace8831a95d3bf397f4dfeedee41ea4f486",
-  "_spec": "qiyujssip@git+https://github.com/morrain/JsSIP.git",
+  "_resolved": "git+https://github.com/NSFI/JsSIP.git#0156aedf9d54905d1309802353b218fa4ae9b746",
+  "_spec": "qiyujssip@git+https://github.com/NSFI/JsSIP.git#qiyu/3.14",
   "_where": "/Users/zhangyanling/Workspace/ysf-space/7uConnect",
   "author": {
     "name": "José Luis Millán",
@@ -28486,7 +28487,7 @@ module.exports={
   "dependencies": {
     "debugwebrtc": "^1.0.7",
     "deepmerge": "^1.5.1",
-    "qiyujssip": "git+https://github.com/NSFI/JsSIP.git"
+    "qiyujssip": "git+https://github.com/NSFI/JsSIP.git#qiyu/3.14"
   }
 }
 
