@@ -28817,6 +28817,7 @@ var config = {
       target.socket_nlb = src.socket_nlb;
       target.media_selectorId = src.media_selectorId;
       target.meida_whitelist = src.meida_whitelist;
+      target.corpCode = src.corpCode || location.hostname.split('.')[0];
 
       return target;
   }
