@@ -28814,7 +28814,7 @@ var config = {
       target.ua.uri = _uri;
       var protocol = src.protocol || 'wss';//location.protocol.replace('http', 'ws').replace(':','');
       target.ua.contact_uri = _uri+ ';transport='+protocol;
-      target.socket_lbs = src.socket_lbs;
+      target.socket_nlb = src.socket_nlb;
       target.media_selectorId = src.media_selectorId;
       target.meida_whitelist = src.meida_whitelist;
 
@@ -29006,7 +29006,7 @@ var Adaptor = {
 
         sipsdk.login({
            ua: this._configration.ua,
-           url: this._configration.socket_lbs,
+           url: this._configration.socket_nlb,
            callback: notifyQiyu,
            extraHeaders: this._configration.extraHeaders
           //  callback: function(type, data) {
@@ -29045,7 +29045,7 @@ var Adaptor = {
   //         account: 'account', // required
   //         domain: '@cc.qiyukf.com'  // required
   //       },
-  //       socket_lbs: 'wss://ipcc2.qytest.netease.com:8443',  // https://aws.amazon.com/cn/blogs/china/overview-of-nlb/
+  //       socket_nlb: 'wss://ipcc2.qytest.netease.com:8443',  // https://aws.amazon.com/cn/blogs/china/overview-of-nlb/
   //       corpCode: 'corpCode',  // required
   //       appId: 'appId',  // required
   //       media: {
