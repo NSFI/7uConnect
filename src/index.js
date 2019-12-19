@@ -275,7 +275,7 @@ let EVENTS_CUSTOM = {
 var Adaptor = {
   SIPUAEventHandlers: SIPUAEventHandlers,
   sdk: sipsdk,
-  _status: C.STATUS_INIT,
+  status: C.STATUS_INIT,
   getStatus: function(){
     return this.status;
   },
@@ -285,7 +285,6 @@ var Adaptor = {
       }
       return C.Cause[status];
   },
-  _acceptRetryTimer: null,
   init: function(configuration) {
     var adaptor = this;
      debug('initQiyu %s', getStackTrace());
