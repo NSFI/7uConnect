@@ -27,6 +27,7 @@ HTML文档中添加媒体元素,元素不可见。通话音频流播放需要对
 
 ### 3、<span id="step3">SDK初始化设置</span>
   SIP通讯必须明确企业标志appId, 注册服务器的sip账号及密码, 以及播放通话的媒体对象。 用户需在HTTPS安全协议且允许访问麦克风的情况下，才能正常接收发音频信息，不满足条件则无法注册服务器初始化失败。所以可选择性配置是否重复询问获取麦克风权限，配置通过白名单形式将企业域名进行部分隔离。*示例如下*
+  (* npm方式引入 QiyuAdaptor 更换成 qiyuconnect)
   ```
       var config = {
           password: callUser.password, // required

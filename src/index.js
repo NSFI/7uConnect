@@ -275,7 +275,7 @@ let EVENTS_CUSTOM = {
 var Adaptor = {
   SIPUAEventHandlers: SIPUAEventHandlers,
   sdk: sipsdk,
-  _status: C.STATUS_INIT,
+  status: C.STATUS_INIT,
   getStatus: function(){
     return this.status;
   },
@@ -285,7 +285,6 @@ var Adaptor = {
       }
       return C.Cause[status];
   },
-  _acceptRetryTimer: null,
   init: function(configuration) {
     var adaptor = this;
      debug('initQiyu %s', getStackTrace());
@@ -329,7 +328,6 @@ var Adaptor = {
         } 
   },
   start: function(configuration) {
-    // var adaptor = this;
     // Load configuration.
     try {
         this._loadConfig(configuration);
@@ -370,21 +368,20 @@ var Adaptor = {
 
     // AdaptorUA
   },
-  // {
-  //       /* SIP authentication. */
-  //       password:  'password', // required
-  //       uri: {
-  //         protocol: 'sip:', // required
-  //         account: 'account', // required
-  //         domain: '@cc.qiyukf.com'  // required
-  //       },
-  //       socket_nlb: 'wss://ipcc2.qytest.netease.com:8443',  // https://aws.amazon.com/cn/blogs/china/overview-of-nlb/
-  //       corpCode: 'corpCode',  // required
-  //       appId: 'appId',  // required
-  //       media: {
-  //         selectorId: 'id'
-  //       }
-  //   }
+  /* {
+        password:  'password', // required
+        uri: {
+            protocol: 'sip:', // required
+            account: 'account', // required
+            domain: '@cc.qiyukf.com'  // required
+        },
+        socket_nlb: 'wss://ipcc2.qytest.netease.com:8443',  // https://aws.amazon.com/cn/blogs/china/overview-of-nlb/
+        corpCode: 'corpCode',  // required
+        appId: 'appId',  // required
+        media: {
+            selectorId: 'id'
+        }
+    } */
   _loadConfig: function(configration){
     var target = Object.assign({}, config.settings);
 
@@ -460,9 +457,6 @@ var Adaptor = {
               console.log(e);
           }
       }
-
-    
-     
   },
   bye: function() {
       var  adaptor = this;
