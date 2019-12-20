@@ -27893,7 +27893,7 @@ var config = {
       var uri = Object.assign({},  {
         portocol: 'sip:', // required
         // account: 'account', // required
-        domain: '@cc.qiyukf.com'  // required
+        domain: ''  // required
       }, src.uri);
       var _uri = uri.portocol + uri.account + uri.domain;
       target.ua.uri = _uri;
@@ -27928,10 +27928,54 @@ debug('version %s', pkg.version);
 
 var adaptor = {};
 var uaEventHandlers = {}; // 代理事件
+// var adaptorEvents = {}; // 代理模块事件注册
+
+//  代理状态
+var C = {
+    STATUS_SUCCESS: 0, // READY 准备好
+    STATUS_INIT: 1, // 正在初始化
+    STATUS_RETRY: 6,// CONNECT_NOTREADY 连接初始化未准备好
+    STATUS_FAIL: 2, // CONNECT_FAIL 连接初始化失败
+    STATUS_MIC_NOT: 3, // 未找到麦克风
+    STATUS_MIC_UN: 4,
+    STATUS_UNSAFE: 5, //非安全模式，即使用http登陆
+    Cause: {
+        '0': '',
+        '1': '电话功能尚未初始化完成，请刷新或稍后重试!',
+        '2': '电话功能初始化失败，请刷新或稍后重试!',
+        '3': '未找到可用的麦克风，请检查麦克风设置并刷新页面重试',
+        '4': '麦克风被禁用，请检查麦克风设置并刷新页面重试',
+        '5': '非安全模式不允许使用音频，请切换成HTTPS方式登录后使用',
+        '6': '电话功能尚未初始化完成，正在努力工作中，请刷新或稍后重试!',
+    }
+};
+
+var sessionC = {
+    Direction: {
+        1: 'CALLIN',
+        2: 'CALLOUT',
+        3: 'LISTENER',
+        4: 'TRANSFER',
+        5: 'FORECAST',
+        6: 'CONFERENCE'
+    },
+    directionType: {
+        'CALLIN': 1,
+        'CALLOUT': 2,
+        'LISTENER': 3,
+        'TRANSFER': 4,
+        'FORECAST': 5,
+        'CONFERENCE': 6
+    }
+};
 
 var QiyuAdaptor = module.exports = {
-    status: adaptor.status,
-    getStatus: getStatus,
+    C: {
+        sessionType: sessionC.directionType
+    },
+    isConnected: isConnected,
+    isConnectError: isConnectError,
+    getConfiguration: getConfiguration,
     getCause: getCause,
     call: call,
     init: init,
@@ -27953,8 +27997,7 @@ var QiyuAdaptor = module.exports = {
     hold: hold,
     unhold: unhold,
     sendDigit: sendDigit,
-    addEventMethod: addEvent,
-    addEvent: addEvent
+    on: addEvent
 
 };
 Object.defineProperties(QiyuAdaptor, {
@@ -27970,45 +28013,29 @@ Object.defineProperties(QiyuAdaptor, {
     }
 });
 
-//  代理状态
-var C = {
-    STATUS_SUCCESS: 0, // READY 准备好
-    STATUS_INIT: 1, // 正在初始化
-    STATUS_RETRY: 6,// CONNECT_NOTREADY 连接初始化未准备好
-    STATUS_FAIL: 2, // CONNECT_FAIL 连接初始化失败
-    STATUS_MIC_NOT: 3, // 未找到麦克风
-    STATUS_MIC_UN: 4,
-    STATUS_UNSAFE: 5, //非安全模式，即使用http登陆
-    Cause: {
-        '0': '',
-        '1': '电话功能尚未初始化完成，请刷新或稍后重试!',
-        '2': '电话功能初始化失败，请刷新或稍后重试!',
-        '3': '未找到可用的麦克风，请检查麦克风设置并刷新页面重试',
-        '4': '麦克风被禁用，请检查麦克风设置并刷新页面重试',
-        '5': '非安全模式不允许使用音频，请切换成HTTPS方式登录后使用',
-        '6': '电话功能尚未初始化完成，正在努力工作中，请刷新或稍后重试!',
-    },
-};
 
-function getStatus() {
-    return {
-        STATUS_SUCCESS: 0, // READY 准备好
-        STATUS_INIT: 1, // 正在初始化
-        STATUS_RETRY: 6,// CONNECT_NOTREADY 连接初始化未准备好
-        STATUS_FAIL: 2, // CONNECT_FAIL 连接初始化失败
-        STATUS_MIC_NOT: 3, // 未找到麦克风
-        STATUS_MIC_UN: 4,
-        STATUS_UNSAFE: 5, //非安全模式，即使用http登陆
-    };
+// =========================
+// SIP适配层 初始化 
+// ========================= 
+// socket是否连接成功：连接并注册成功
+function isConnected() {
+    return !adaptor.status;
 }
-
+// socket连接错误
+function isConnectError() {
+    return adaptor.status === C.STATUS_FAIL;
+}
+// 代理初始化连接失败原因
 function getCause(){
     return C.Cause[adaptor.status];
 }
-
+// 代理设置项查看
+function getConfiguration() {
+    return adaptor._configration;
+}
 
 /**
- * 
+ * 代理初始化
  * @param {*} options 
  */
 function init(options){
@@ -28041,6 +28068,7 @@ function init(options){
     }
 }
 
+// 代理配置项格式化
 function _loadConfig(options){
     var target = Object.assign({}, config.settings);
 
@@ -28049,6 +28077,9 @@ function _loadConfig(options){
     return target;
 }
 
+// =========================
+// SIP UA 初始化 
+// ========================= 
 var ua = null;
 function initSIPUA(){
     try {
@@ -28182,9 +28213,12 @@ uaEventHandlers = {
         
         adaptor._session = _session;
 
-        fireEvent('ringing', {
-            type: data.request.hasHeader('Direction-Type') ? Number(data.request.getHeader('Direction-Type')) : 1
-        });
+        var  directionType = data.request.hasHeader('Direction-Type') ? Number(data.request.getHeader('Direction-Type')) : sessionC.directionType.CALLIN;
+        fireEvent('ringing', {  type: directionType });
+
+        /* if(['CALLOUT', 'LISTENER'].inclueds(sessionC.Direction[directionType])){
+            adaptor.accept();
+        } */
 
         _session.on('accepted', function() {
                 // window.document.getElementById('qiyuPhone') idSelector
@@ -28225,7 +28259,9 @@ function socketDisconnectedNLB(data){
 }
 
 
-//===== Methods
+// ========================= 
+// SIP Session Methods
+// =========================
 var _sessionCommonOptions = null;
 function getSessionOptions(options, overwrite){
     if(!_sessionCommonOptions) {
@@ -28391,7 +28427,7 @@ function unmute(options) {
     }
 }
 /**
- * @param  {Number or String} 符合DTMF标准的   eg.  sendDigit(4) or sendDigit("1234#")
+ * @param  {Number or String} 符合DTMF标准的   eg.  sendDigit(4) or sendDigit('1234#')
  */
 function sendDigit(tone) {
     if(adaptor.session) {
@@ -28416,7 +28452,7 @@ function sendDigit(tone) {
  * @param {Function} eventHandle  事件处理
  * @param {[this]}   scope    注册模块，默认为当前模块
  */
-    //  'ringing', //来电事件
+//  'ringing', //来电事件
 //  'call', //pc端唤起拨号
 //  'warning',//提示用户重启浏览器  
 //  'jitterbuffer' //拨号中上报延迟信息
