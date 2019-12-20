@@ -1,7 +1,7 @@
 # SIP 适配器
-    SIP 适配器是七鱼呼叫对SIP通话开源库[JsSIP](https://github.com/versatica/JsSIP)的二次开发，实现SIP通话web端的通讯能力。
+  SIP 适配器是七鱼呼叫对SIP通话开源库[JsSIP](https://github.com/versatica/JsSIP)的二次开发，实现SIP通话web端的通讯能力。
 
-## <span id="introduction">SIP适配器使用说明 </span>
+## <span id="introduction">使用说明 </span>
     实现web端通话，SIP适配器的使用需满足4个基本步骤。
 
   1. [SDK 脚本引入](#step1)
@@ -19,7 +19,7 @@
     { "qiyuconnect": "git+https://github.com/NSFI/7uConnect.git#v3.14-hk" }
   ```
 
-### 2、<span id="step2">通话音频播放媒体对象</span>
+### 2、<span id="step2">通话音频播放媒体对象预设</span>
 HTML文档中添加媒体元素,元素不可见。通话音频流播放需要对应SIP适配器初始化配置媒体播放选择器 `media_selectorId` *示例如下*
 ```
   <video id="qiyuPhone" autoplay="" style="position:absolute;z-index: -1!important;opacity:0"></video>
@@ -30,16 +30,14 @@ HTML文档中添加媒体元素,元素不可见。通话音频流播放需要对
   (* npm方式引入 QiyuAdaptor 更换成 qiyuconnect)
   ```
       var config = {
-          password: callUser.password, // required
+          password: 'accountpassowrd', // required
           uri: {
-              account: '10000700000043', // required
-              domain: '@cc.qiyukf.com' // 选填 默认 @cc.qiyukf.com
+            account: alice,
+            domain: '@example.com',
           },
-          socket_nlb: 'wss://ipcc2.qytest.netease.com:8443',  // required  注册服务器  https://aws.amazon.com/cn/blogs/china/overview-of-nlb/
+          socket_nlb: 'wss://server.example.com:443',  // required  注册服务器  https://aws.amazon.com/cn/blogs/china/overview-of-nlb/
           appId: "8a216da854ebfcf70154f24866e4083f",  // required
           media_selectorId:  "qiyuPhone",
-          meida_whitelist: [], // 选填
-          corpCode: location.hostname.split('.')[0],  // 选填
       };
       QiyuAdaptor.init(config);
   ```
@@ -60,6 +58,98 @@ HTML文档中添加媒体元素,元素不可见。通话音频流播放需要对
      QiyuAdaptor.bye();
 
    ```
+
+
+ ## 适配器初始化设置项  Configuration Parameters
+SIP适配器需要一个配置对象进行初始化，其中包括一些必填项和选填项. 示例
+var configuration = {
+  password: 'accountpassword',
+  <!-- uri_hostname: 'username@example.com', -->
+  uri: {
+    account: 'alice',
+    domain: '@example.com'
+  },
+  socket_nlb: 'wss://server.example.com:443',
+  appId: "a216da854ebfcf70154f24866e4083f",
+};
+
+var sipAdaptor = QiyuAdaptor.init(configuration);
+
+
+##全部配置项
+
+### 必设项
+* [password](#password)
+* [uri](#uri)
+* [socket_nlb](#socket_nlb)
+* [socket_lbs](#socket_lbs)
+* [appId](#appId)
+
+### 选设项
+  <!-- * [pcConfig](#pcConfig) -->
+  * [media_selectorId](#media_selectorId)
+  * [corpCode](#corpCode)
+  * [meida_whitelist](#meida_whitelist)
+
+**<span id="password">password</span>**
+SIP 认证密码 (String).
+
+```
+password: "1234"
+```
+
+**<span id="uri">uri</span>**
+用户代理的SIP URI (Object). 给 SIP服务提供SIP账号地址，Object parameters如下：
+*account*  <small>URI账号</small>
+*domain*  <small>URI 主域</small>
+```
+ uri: {
+   account: "alice",
+   domain: "@example.com"
+ }
+```
+
+**<span id="socket_nlb">socket_nlb</span>**
+SIP通讯固定长连接（websocket url）。与动态地址socket_lbs二选一。
+```
+socket_nlb: "wss:server.example.com:433"
+```
+
+**<span id="socket_lbs">socket_lbs</span>**
+SIP通讯动态长连接（Object）。通过接口和选取规则决定最终地址。与固定地址socket_nlb二选一。Object parameters如下：
+*api*  <small>地址获取接口(Url)</small>
+*localList*  <small>本地容错服务列表(Array)</small>
+```
+socket_lbs: {
+  api: "http://gateway.example.com/api/path/to/lbs"
+  localList: [
+    "wss:bak1.example.com:433", 
+    "wss:bak2.example.com:433"
+  ]
+}
+```
+
+**<span id="appId">appId</span>**
+企业唯一标识（String）。
+```
+appId: "921576811179329"
+```
+**<span id="media_selectorId">media_selectorId</span>**
+通话媒体流输出HTML文档对象（HTML Document Selector）。
+```
+media_selector: "j_sessionMediaId"
+```
+**<span id="corpCode">corpCode</span>**
+企业域名标识（String）。
+```
+corpCode: "qiyu"
+```
+**<span id="meida_whitelist">meida_whitelist</span>**
+麦克风重复检测企业白名单（Array）。由企业域名标识组成的白名单列表。
+```
+media_whitelist: ["qiyu", "qiyu1"]
+```
+  <!-- <span id="pcConfig">pcConfig</span> -->
 
 [回顶部](#introduction)
 
