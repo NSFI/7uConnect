@@ -21,6 +21,25 @@ var C = {
     },
 };
 
+var sessionC = {
+    Direction: {
+        1: 'CALLIN',
+        2: 'CALLOUT',
+        3: 'LISTENER',
+        4: 'TRANSFER',
+        5: 'FORECAST',
+        6: 'CONFERENCE'
+    },
+    directionType: {
+        'CALLIN': 1,
+        'CALLOUT': 2,
+        'LISTENER': 3,
+        'TRANSFER': 4,
+        'FORECAST': 5,
+        'CONFERENCE': 6
+    }
+};
+
 function getStackTrace() {
     var obj = {};
     Error.captureStackTrace(obj, getStackTrace);
@@ -149,7 +168,7 @@ var config = {
       target.socket_nlb = src.socket_nlb;
       target.media_selectorId = src.media_selectorId;
       target.meida_whitelist = src.meida_whitelist;
-      target.corpCode = src.corpCode || location.hostname.split('.')[0];
+      target.corpCode = src.corpCode;
 
       return target;
   }
@@ -221,7 +240,7 @@ var SIPUAEventHandlers = {
         adaptor._session = _session;
 
         adaptor.fireEvent('ringing', {
-            type: data.request.hasHeader('Direction-Type') ? Number(data.request.getHeader('Direction-Type')) : 1
+            type: data.request.hasHeader('Direction-Type') ? Number(data.request.getHeader('Direction-Type')) : sessionC.Direction.CALLIN
         });
 
         _session.on('accepted', function() {
@@ -273,9 +292,11 @@ let EVENTS_CUSTOM = {
 }; */
 
 var Adaptor = {
-  SIPUAEventHandlers: SIPUAEventHandlers,
   sdk: sipsdk,
   status: C.STATUS_INIT,
+  C: {
+    sessionType: sessionC.directionType
+   },
   getStatus: function(){
     return this.status;
   },
@@ -328,6 +349,7 @@ var Adaptor = {
         } 
   },
   start: function(configuration) {
+    var adaptor = this;
     // Load configuration.
     try {
         this._loadConfig(configuration);
@@ -336,30 +358,22 @@ var Adaptor = {
         }
 
         sipsdk.login({
-           ua: this._configuration.ua,
-           url: this._configuration.socket_nlb,
-           callback: notifyQiyu,
-           extraHeaders: this._configuration.extraHeaders
-          //  callback: function(type, data) {
-          //    if(SIPUAEventHandlers.hasOwnProperty(type) &&
-          //       Object.prototype.toString.call(SIPUAEventHandlers[type]) === '[object Function]'
-          //     ){
-          //       SIPUAEventHandlers[type](adaptor, data);
-          //    }
-          //  } 
+            ua: this._configuration.ua,
+            url: this._configuration.socket_nlb,
+            extraHeaders: this._configuration.extraHeaders,
+            callback: function(type, data) {
+                debug('[SIPEventNotifyQiyu] type:%s, data:%O', type, data);
+                if(SIPUAEventHandlers.hasOwnProperty(type) &&
+                Object.prototype.toString.call(SIPUAEventHandlers[type]) === '[object Function]'
+                ){
+                adaptor.ua = adaptor.sdk.ua;
+                SIPUAEventHandlers[type].call(adaptor, data);
+                }
+            }
         });
-        this.ua = sipsdk.ua;
-
-      /* var config = {
-        socket: this._configuration.socket.nlb,
-        ua: this._configuration.ua,
-        extraHeaders: this._configuration.extraHeaders,
-        media_selectorId: this._configuration.media.selectorId,
-        eventHandlers: SIPUAEventHandlers
-      }; */
-
-      // this.adaptor.sdk.init(config);
-        
+        if(this.ua){
+            this.ua = sipsdk.ua;
+        }
     } catch (e) {
         this.status = C.STATUS_NOT_READY;
         this._error = C.CONFIGURATION_ERROR;
@@ -455,7 +469,7 @@ var Adaptor = {
    * @param {[this]}   scope    注册模块，默认为当前模块
    */
   EVENTS_CUSTOM: {},
-  addEventMethod: function(eventType, eventHandle, scope) {
+  on: function(eventType, eventHandle, scope) {
       if (typeof eventType === 'string') {
           this.EVENTS_CUSTOM[eventType] = function() {
               eventHandle.apply(scope, Array.prototype.slice.call(arguments));
@@ -476,118 +490,6 @@ var Adaptor = {
       }
   },
 };
-function notifyQiyu(type, data) {
-      debug('[notifyQiyu] type:%s, data:%O', type, data);
-      var adaptor = Adaptor, ua = adaptor.sdk.ua;
-      switch (type) {
-          case 'registered':
-              adaptor.status = C.STATUS_SUCCESS;
-              break;
-          case 'unregistered':
-              adaptor.status = C.STATUS_FAIL;
-              break;
-          case 'registrationFailed':
-              adaptor.status =  C.STATUS_FAIL;
-
-            // 连接状态  请求超时pending、响应超时 408、410、420、480  UNAVAILABLE 
-              // var isResistered = ua.isRegistered(); // 是否有注册成功过
-              var isConnected = ua.isConnected();
-
-              /* 连接状态 请求超时 */
-              var isResponseTimeout = data.cause && data.cause === 'UNAVAILABLE';
-              var isRequestTimeout = data.cause && data.cause === 'Request Timeout';
-              var isConnectTimeOut = isRequestTimeout || isResponseTimeout;
-              // 若是响应超时避免服务器集结压力过大做时间缓冲, 区间为5s
-              var isValidRegister = !this.timestampRegister || (Math.abs(Date.now() - this.timestampRegister)/1000 > 5);
-              if(isConnected && isConnectTimeOut && isValidRegister ) {
-                  this.timestampRegister = Date.now();
-                  log('ws服务注册失败-重试');
-                  ua.register();// 未注册成功过 或 注册成功过isResistered 则关闭 一个周期仅触发一次 ua.registered  ua.registrator.close();
-              } else {
-                  var isConnectError = data.cause && data.cause === 'Connection Error';
-                  this.uaConnectError = isConnectError;
-                  log('ws服务注册失败-重连 连接错误 %s', this.uaConnectError);
-              }
-              break;
-          case 'connected':
-              this.connected = true;
-              this.reconnect = 0;
-              this.callingReconnect = false;
-              break;
-          case 'disconnected':
-              adaptor.status =  C.STATUS_FAIL;
-              data = data || {};
-              debug('[disconnected] %O', {
-                  data: data,
-                  isConnected: ua.isConnected(),
-                  status: ua.status,
-                  ua: ua,
-              });
-
-              try {
-              // ①若连接成功过之后未连接成功  ②_uaConnectError 避免重复执行 ③ 避免服务器高并发请求集结做缓冲
-                var isValidConnect = !this._timestampConnect || (Math.abs(Date.now() - this._timestampConnect)/1000 > 1);
-                if(data.error && this._uaConnectError && this._connected && isValidConnect) {
-                        this._uaConnectError = 0;
-                        this._timestampConnect = Date.now();
-                        ua.start();
-                  }
-              } catch (e) {
-                  console.log('disconnect error');
-              }
-
-              break;
-          case 'newRTCSession':
-              if (data.originator === 'local') { return; }
-
-              var _session = data.session;
-              // Avoid if busy or other incoming
-              if (adaptor._session) {
-                  debug('[terminate] %O', { // debug
-                      status_code: 486,
-                      reason_phrase: 'Busy Here',
-                      session: _session
-                  });
-
-                  _session.terminate({
-                      status_code: 486,
-                      reason_phrase: 'Busy Here'
-                  });
-                  return;
-              }
-        
-              adaptor._session = _session;
-
-              adaptor.fireEvent('ringing', {
-                  type: data.request.hasHeader('Direction-Type') ? Number(data.request.getHeader('Direction-Type')) : 1
-              });
-
-                _session.on('accepted', function() {
-                        // window.document.getElementById('qiyuPhone') idSelector
-                    var nodePhone = window.document && (nodePhone = window.document.getElementById(adaptor._configuration.media_selectorId));
-                    if (nodePhone) {
-                        // Display remote stream
-                        nodePhone.srcObject = _session.connection.getRemoteStreams()[0];
-                    }
-                    // stats.startStats(session.connection);
-                });
-                _session.on('ended', function() {
-                    debug('jssip:ended');
-
-                    // stats.stopStats();
-                    adaptor._session = null;
-                });
-                _session.on('failed', function() {
-                    debug('jssip:failed');
-                    // stats.stopStats();
-                    adaptor._session = null;
-                });
-
-              break;
-          default:
-              break;
-      }
-  }
 
 var QiyuAdaptor = module.exports  = Adaptor;
 
