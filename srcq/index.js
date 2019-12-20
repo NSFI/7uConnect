@@ -1,42 +1,50 @@
 /**
  * Dependencies.
  */
-
 var pkg = require('../package.json');
 var JsSIP = require('qiyujssip');
-var debug = JsSIP.debug('QiyuConnect');
 var deepmerge = require('deepmerge');
+var debug = JsSIP.debug('QiyuConnect');
+var debugUA = JsSIP.debug('QiyuUA');
+var debugMethod = JsSIP.debug('QiyuMethod');
+var debugSession = JsSIP.debug('QiyuSession');
 
+
+var config = require('./Config.js');
 
 debug('version %s', pkg.version);
 
+var adaptor = {};
+var uaEventHandlers = {}; // 代理事件
 
 var QiyuAdaptor = module.exports = {
-    init: init,
+    status: adaptor.status,
+    getStatus: getStatus,
     getCause: getCause,
-    accept: accept, // 接起
-    disConnect: disConnect, // 断开连接
-    connect: connect, // 重新连接
-    login: login,
     call: call,
-    answer:  function(options) {
-        if(this.session) {
-            answer(this.session, options);
+    init: init,
+    connect: function() {// 重新连接
+        if(adaptor.ua) {
+            adaptor.ua.start();
         }
     },
-    bye: function(options) {
-        if(this.session) {
-            bye(this.session, options);
+    disconnect: function() { // 断开连接
+        if(adaptor.ua) {
+            adaptor.ua.stop();
         }
     },
-    sendDigit: function(tone) {
-        if(this.session) { 
-            sendDigit(this.session, tone);
-        }
-    },
-    addEventMethod: addEventMethod
-};
+    bye: bye,
+    accept: accept,
+    answer: answer,
+    mute: mute,
+    unmute: unmute,
+    hold: hold,
+    unhold: unhold,
+    sendDigit: sendDigit,
+    addEventMethod: addEvent,
+    addEvent: addEvent
 
+};
 Object.defineProperties(QiyuAdaptor, {
     name: {
         get: function() {
@@ -49,40 +57,8 @@ Object.defineProperties(QiyuAdaptor, {
         }
     }
 });
-module.QiyuConnect = {
-    Utils: JsSIP.Utils,
-    init: init,
-    getCause: getCause,
-    accept: accept, // 接起
-    disConnect: disConnect, // 断开连接
-    connect: connect, // 重新连接
-    login: login,
-    call: call,
-    answer: answer,
-    bye: bye,
-    hold: hold,
-    unhold: unhold,
-    mute: mute,
-    unmute: unmute,
-    sendDigit: sendDigit,
-    debug: JsSIP.debug,
-    addEventMethod: addEventMethod,
-    DebugWebRTC: require('debugwebrtc')
-};
 
-/* Object.defineProperties(QiyuConnect, {
-    name: {
-        get: function() {
-            return pkg.siptitle;
-        }
-    },
-    version: {
-        get: function() {
-            return pkg.sipversion;
-        }
-    }
-}); */
-
+//  代理状态
 var C = {
     STATUS_SUCCESS: 0, // READY 准备好
     STATUS_INIT: 1, // 正在初始化
@@ -102,140 +78,36 @@ var C = {
     },
 };
 
-var config = {
-  // business
-  defaultConfig: {
-      /* SIP authentication. */
-      password:  null, // required
-      /* SIP account. */
-      uri: {
-        // sip_portocol: null, // required
-        // username  : null,  // required
-        // sip_domain: null,  // required
-        // sip_transport: null,
-        portocol: 'sip:', // required
-        account: null, // required
-        domain: '@cc.qiyukf.com'  // required
-      },
-      portocol: null, // contant_uri -> transport ; ua sockets -> portocol
-      pcConfig: null,
-      /* Connection options. */
-      socket: {
-        type: 0, // 0: nlb(National Load Balancing) 固定服务   1: lbs(Location Based Service) 动态服务   // required
-        // socket: null,  // required
-        nlb: null,  // https://aws.amazon.com/cn/blogs/china/overview-of-nlb/
-        lbsAPI: null,  //  
-        lbsLocal: null, // []  selectable
-        lbsRemote: null, // [] 
-      },
-      /* session Options */
-      // eventHandlers: null, //{}
+function getStatus() {
+    return {
+        STATUS_SUCCESS: 0, // READY 准备好
+        STATUS_INIT: 1, // 正在初始化
+        STATUS_RETRY: 6,// CONNECT_NOTREADY 连接初始化未准备好
+        STATUS_FAIL: 2, // CONNECT_FAIL 连接初始化失败
+        STATUS_MIC_NOT: 3, // 未找到麦克风
+        STATUS_MIC_UN: 4,
+        STATUS_UNSAFE: 5, //非安全模式，即使用http登陆
+    };
+}
 
-      /* bussiness corporation  */
-      // bu_extraHeaders: {},
-      meida_whitelist: [], //
-      corpCode: '',  // required
-      appId: ''  // required
-  },
-
-  settings: {
-    /* 代理配置信息 */
-    ua: {
-        /* SIP authentication. */
-        // authorization_user : null,
-        password           : null, //calluser.password,
-        // realm              : null,
-        // ha1                : null,
-
-        /* SIP account. */
-        // display_name : null,
-        uri        : null, //`sip:${username}${QiyuConfig.sip_url}` <= { portocol, account: null, domain: null , transport} 
-        contact_uri: null,//sip:${calluser.username}${QiyuConfig.sip_url};transport=${location.protocol.replace('http', 'ws').replace(':','')}`
-
-        /* Session parameters. */
-        session_timers                : false, // true,
-        // session_timers_refresh_method : JsSIP_C.UPDATE,
-        no_answer_timeout             : 60,
-
-        /* Registration parameters. */
-        // register         : true,
-        register_expires : 100, //600,
-        // registrar_server : null,
-
-        /* Connection options. */
-        // sockets                          : null,
-        // connection_recovery_max_interval : JsSIP_C.CONNECTION_RECOVERY_MAX_INTERVAL,
-        // connection_recovery_min_interval : JsSIP_C.CONNECTION_RECOVERY_MIN_INTERVAL,
-
-        // connection_recovery_min_interval: 1, // 重连最小周期
-        connection_recovery_max_interval: 4, // 重连最大周期
-    },
-    /* 会话配置信息 */
-    session: { 
-      // goouting:  ua.call(target, options) -> session.connect(target, options)
-      // -> createRTCConnection: session._createRTCConnection(pcConfig, rtcvarraints) <= {pcConfig}
-      // -> newRTCSession: session._newRTCSesstion(['local', 'remote'],_request) -> ua.newRTCSession('newRTCSession',{originator, session, request}) -> emitEventHanderBusiness <= extraHeaders
-      // incoming: session.answer(options)  
-      // -> createRTCConnection: session._createRTCConnection(pcConfig, rtcvarraints) <= {pcConfig}
-      // -> navigator.mediaDevices.getUserMedia()
-      // -> session._connecting(request) -> emit('connecting', {request})
-      //- common
-        mediavarraints: { 
-          audio: true, 
-          video: false // true
-        },
-        mediaStream: null,
-        pcConfig: null, // { iceServers: [] }
-        // extraHeaders: null, // : [ 'App-ID:' + appId] <= appId
-        // rtcvarraints: null,
-        // eventHandlers: null, // {} 
-        // rtcOffervarraints: null,
-        // rtcAnswervarraints
-        // -
-        // sessionTimersExpires: JsSIP_C.SESSION_EXPIRES  // max: JsSIP_C.MIN_SESSION_EXPIRES
-    },
-    
-    extraHeaders: null
-  },
-  load: function(target, src) {
-      target.extraHeaders = ['App-ID:' + src.appId];
-      target.ua.password = src.password;
-      var uri = Object.assign({},  {
-        portocol: 'sip:', // required
-        // account: 'account', // required
-        domain: '@cc.qiyukf.com'  // required
-      }, src.uri);
-      var _uri = uri.portocol + uri.account + uri.domain;
-      target.ua.uri = _uri;
-      var portocol = src.portocol || 'wss';//location.protocol.replace('http', 'ws').replace(':','');
-      target.ua.contact_uri = _uri+ ';transport='+portocol;
-      target.socket_nlb = src.socket_nlb;
-      target.media_selectorId = src.media_selectorId;
-      target.meida_whitelist = src.meida_whitelist;
-      target.corpCode = src.corpCode;
-
-      return target;
-  }
-};
+function getCause(){
+    return C.Cause[adaptor.status];
+}
 
 
-function init(configration){
-    this.status = C.STATUS_INIT;
-    var adaptor = this;
+/**
+ * 
+ * @param {*} options 
+ */
+function init(options){
+     adaptor.status = C.STATUS_INIT;
     try{
         navigator.mediaDevices.getUserMedia({
-                audio: true
+            audio: true
         })
         .then(function() {
-            _loadConfig(configration);
-            var _configration = adaptor._configration;
-            var config = {
-                ua: _configration.ua,
-                url: _configration.socket_nlb, 
-                extraHeaders: _configration.extraHeaders
-            };
-            console.log(_configration, config);
-            login(config);
+            _loadConfig(options);
+            initSIPUA();
         })
         .catch(function(error) {
             debug('getUserMediaError %O', error);
@@ -257,81 +129,372 @@ function init(configration){
     }
 }
 
-function _loadConfig(configration){
+function _loadConfig(options){
     var target = Object.assign({}, config.settings);
 
-    var src = Object.assign({}, config.defaultConfig, configration ); 
-    this._configration = config.load(target, src);
+    var src = Object.assign({}, config.defaultConfig, options ); 
+    adaptor._configration = config.load(target, src);
+    return target;
 }
 
-function getCause(){
-    return C.Cause[this.status];
-}
-
-function getStackTrace() {
-    var obj = {};
-    Error.captureStackTrace(obj, getStackTrace);
-    return obj.stack;
-}
-
-/**
- * @param {Options}
- *   @param url [String] eg. "ws://59.111.96.125:5066"
- *   @param ua [Object] 
- *      @param  uri [String] eg. "sip:1002@59.111.96.125"
- *      @optinal param  display_name 
- *      @optinal param  password
- *      @optional param contact_uri eg. "sip:1002@59.111.96.125"
- *   @optinal param callback [Function] 回掉函数 arguments[0]:type 事件类型  
- *   @optinal param extraHeaders: Append custom headers to every REGISTER / un-REGISTER request. They can be overriden at any time.
- */
-function login(options) {
-
-    /**
-     * 事件通知回掉函数
-     * @param  {[type]} type [description]
-     * @return {[type]}      [description]
-     */
-    /* function on(type) {
-        return function(data) {
-            if (JsSIP.Utils.isFunction(options.callback)) {
-                debug('%s:%O', type, data);
-                options.callback(type, data);
-            } else {
-                debug('no callback function!');
-            }
-        };
-    }
- */
+var ua = null;
+function initSIPUA(){
     try {
+        var _configration = adaptor._configration;
 
-        var ua = this.ua = new JsSIP.UA(deepmerge({
-            sockets: new JsSIP.WebSocketInterface(options.url)
-        }, options.ua, true));
+       var uaOptions = deepmerge({
+            sockets: new JsSIP.WebSocketInterface(_configration.socket.url)
+        }, _configration.ua, true);
 
-
-        ua.__extraHeaders = options.extraHeaders; //缓存extraHeaders信息，其它接口使用
-        ua.registrator().setExtraHeaders(ua.__extraHeaders);
+        ua = new JsSIP.UA(uaOptions);
+ 
+        ua.registrator().setExtraHeaders(_configration.extraHeaders);
         ua.start();
-        /* ua.on('connecting', on('connecting'));
-        ua.on('connected', on('connected'));
-        ua.on('disconnected', on('disconnected'));
-        ua.on('registered', on('registered'));
-        ua.on('unregistered', on('unregistered'));
-        ua.on('registrationFailed', on('registrationFailed'));
-        ua.on('newRTCSession', on('newRTCSession')); */
-        ua.on('connecting', onConnecting);
-        ua.on('connected', onConnected);
-        ua.on('disconnected', onDisconnected);
-        ua.on('registered', onRegistered);
-        ua.on('unregistered', onUnregistered);
-        ua.on('registrationFailed', onRegistrationFailed);
-        ua.on('newRTCSession', onNewRTCSession);
+
+        
+        ua.on('connecting', onUAEvent('connecting'));
+        ua.on('connected', onUAEvent('connected'));
+        ua.on('disconnected', onUAEvent('disconnected'));
+        ua.on('registered', onUAEvent('registered'));
+        ua.on('unregistered', onUAEvent('unregistered'));
+        ua.on('registrationFailed', onUAEvent('registrationFailed'));
+        ua.on('newRTCSession', onUAEvent('newRTCSession'));
+        // ua.on('connecting', onConnecting);
+        // ua.on('connected', onConnected);
+        // ua.on('disconnected', onDisconnected);
+        // ua.on('registered', onRegistered);
+        // ua.on('unregistered', onUnregistered);
+        // ua.on('registrationFailed', onRegistrationFailed);
+        // ua.on('newRTCSession', onNewRTCSession);
 
     } catch (error) {
         debug('login error %s', error.message);
     }
 }
+
+function onUAEvent(type){
+    return function(data) {
+        debugUA('[emitUAEvent] type: %s, data: %O', type, data);
+        if(uaEventHandlers.hasOwnProperty(type) &&
+            Object.prototype.toString.call(uaEventHandlers[type]) === '[object Function]'
+            ){
+            uaEventHandlers[type].call(adaptor, data);
+        }
+    };
+}
+
+uaEventHandlers = {
+    connected: function(data){
+        this.connected = true;
+        this.reconnect = 0;
+        this.callingReconnect = false;
+        debugUA('[onConnected] %O',{
+            ws: this._configration.socket.url || '',
+            data: data
+        });
+    },
+    // 注册成功 ua.on('registered', onRegistered);
+    registered: function() {
+        this.status = C.STATUS_SUCCESS;
+    },
+    // 注册注销 ua.on('unregistered', onUnregistered);
+    unregistered: function(data){
+        this.status = C.STATUS_FAIL;
+        debugUA('[onUnregistered] %O', data || {});
+    },
+    // 注册失败  ua.on('registrationFailed', onRegistrationFailed);
+    registrationFailed: function(data){
+        this.status =  C.STATUS_FAIL;
+        var failedCause = 'ws服务注册失败-重连 连接错误';
+        // 连接状态  请求超时pending、响应超时 408、410、420、480  UNAVAILABLE 
+        var isConnected = ua.isConnected();
+
+        /* 连接状态 请求超时 */
+        var isResponseTimeout = data.cause && data.cause === 'UNAVAILABLE';
+        var isRequestTimeout = data.cause && data.cause === 'Request Timeout';
+        var isConnectTimeOut = isRequestTimeout || isResponseTimeout;
+        // 若是响应超时避免服务器集结压力过大做时间缓冲, 区间为5s
+        var isValidRegister = !this.timestampRegister || (Math.abs(Date.now() - this.timestampRegister)/1000 > 5);
+        if(isConnected && isConnectTimeOut && isValidRegister ) {
+            this.timestampRegister = Date.now();
+            failedCause = 'ws服务注册失败-重试';
+            ua.register();// 未注册成功过 或 注册成功过isResistered 则关闭 一个周期仅触发一次 ua.registered  ua.registrator.close();
+        } else {
+            var isConnectError = data.cause && data.cause === 'Connection Error';
+            this.uaConnectError = isConnectError;
+        }
+
+        debugUA('[onRegistrationFailed] %O', {
+            cause: failedCause,
+            data: data
+        });
+    },
+    // 连接失败 ua.on('disconnected', onDisconnected);
+    disconnected: function(data){
+        this.status =  C.STATUS_FAIL;
+        var socketConfig = this._configration.socket;
+        if(socketConfig.type){
+            socketDisconnectedNLB.apply(this, data);
+        }
+        debugUA('[onDisconnected] %O', {
+            data: data || {},
+            ua: ua || {},
+            socketConfig: socketConfig
+        });
+    },
+    // 获取电话，注册电话事件 ua.on('registrationFailed', onNewRTCSession);
+    newRTCSession: function(data){
+        debug('[onNewRTCSession] %O', {
+            data: data
+        });
+        if (data.originator === 'local') { return; }
+
+        debugUA('[onNewRTCSession] %O', {
+            data: data
+        });
+        var _session = data.session;
+        // Avoid if busy or other incoming
+        if (adaptor._session) {
+            debug('[terminate] %O', { // debug
+                status_code: 486,
+                reason_phrase: 'Busy Here',
+                session: _session
+            });
+
+            _session.terminate({
+                status_code: 486,
+                reason_phrase: 'Busy Here'
+            });
+            return;
+        }
+        
+        adaptor._session = _session;
+
+        fireEvent('ringing', {
+            type: data.request.hasHeader('Direction-Type') ? Number(data.request.getHeader('Direction-Type')) : 1
+        });
+
+        _session.on('accepted', function() {
+                // window.document.getElementById('qiyuPhone') idSelector
+            var nodePhone = window.document && (nodePhone = window.document.getElementById(adaptor._configration.media_selectorId));
+            if (nodePhone) {
+                // Display remote stream
+                nodePhone.srcObject = _session.connection.getRemoteStreams()[0];
+            }
+            // stats.startStats(session.connection);
+        });
+        _session.on('ended', function() {
+            debug('jssip:ended');
+
+            // stats.stopStats();
+            adaptor._session = null;
+        });
+        _session.on('failed', function() {
+            debug('jssip:failed');
+            // stats.stopStats();
+            adaptor._session = null;
+        });
+
+    }
+};
+
+function socketDisconnectedNLB(data){
+    try {
+        // ①若连接成功过之后未连接成功  ②_uaConnectError 避免重复执行 ③ 避免服务器高并发请求集结做缓冲
+        var isValidConnect = !this._timestampConnect || (Math.abs(Date.now() - this._timestampConnect)/1000 > 1);
+        if(data.error && this._uaConnectError && this._connected && isValidConnect) {
+            this._uaConnectError = 0;
+            this._timestampConnect = Date.now();
+            this.ua.start();
+        }
+    } catch (e) {
+        console.log('disconnect error');
+    }
+}
+
+
+//===== Methods
+var _sessionCommonOptions = null;
+function getSessionOptions(options, overwrite){
+    if(!_sessionCommonOptions) {
+        _sessionCommonOptions = {   
+            extraHeaders: adaptor._configration.extraHeaders.slice() 
+        };
+    }
+    return deepmerge(options || {}, _sessionCommonOptions, overwrite || false);
+}
+
+// var uaMethodHandlers = {};
+/**
+ * @param  {String} 呼叫目标
+ * @param  {Object} options 可选的扩展对象
+ */
+function call(target, options) {
+    return adaptor.ua.call(target, deepmerge(options || {}, {
+        extraHeaders: adaptor._configration.extraHeaders.slice()
+    }));
+}
+function accept(options) {
+    var hasAccept = false;//是否接起过
+    var _configration = adaptor._configration;
+    var answerOptions = _configration.session; //media.pcConfig;
+
+    // 重试机制白名单：3次重试
+    // var someCode = ['7','ipcc1213','gamesbluebc','wmccs','yimutian','7daichina','5050sgmw','siji','bluebc'];//这里的企业，在接起时获取媒体设备，如果没有返回，增加重试机制
+    var retryCount = 0;//重试次数
+    var retryTimer = null; //重试定时器
+
+    var  retryCorpWhiteList = _configration.meida_whitelist || []; //_configration.meida.whitelist;
+    var  TheCorp = _configration.corpCode;
+
+    debugMethod('[accept] corpCode:%s options: %O', TheCorp, options);
+    if (retryCorpWhiteList.includes(TheCorp)) {
+        retryGetUserMedia();
+    } else {// 非白名单直接接听处理 // 非someCode里定义的企业保持原有的逻辑
+        if(adaptor.session){
+            answer(adaptor.session, answerOptions);
+        }
+    }
+
+    function retryGetUserMedia() {
+        retryCount++;
+        retryTimer = null;
+        //重试次数小于3次时，起一个定时器，如果navigator.mediaDevices.getUserMedia没有返回，定时器触发，重试。
+        if (retryCount < 3){ 
+            retryTimer = setTimeout(retryGetUserMedia, 200);
+        }
+
+        try{
+            navigator.mediaDevices.getUserMedia({audio: true, video: false}).then(function(stream) {
+                clearTimeout(retryTimer);
+                debugMethod('[accept] getUserMedia success. retryCount:%d hasAccept:%d', retryCount, Number(hasAccept));
+
+                if(!hasAccept){//防止多次调用：如果navigator.mediaDevices.getUserMedia返回就是很慢，三次重试过了，然后同时返回成功，此时防止接起多次
+                    answerOptions.mediaStream = stream;
+                    answer(adaptor.session, answerOptions);
+                    hasAccept = true;
+                }
+
+            }).catch(function(error) {
+                debugMethod('[accept] retryCount:%d getUserMedia failed %O', retryCount, error);
+            });
+        }catch(e){
+            console.log(e);
+        }
+    }
+}
+/**
+ * @param  {Obejct} 可选参数用于以后扩展
+ */
+function answer(options) {
+    if(adaptor.session) {
+        adaptor.session.answer(getSessionOptions(options));
+        debugSession('[answer] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+
+function bye(options) {
+    if(adaptor.session) {
+        adaptor.session.terminate(getSessionOptions(options));
+        debugSession('[bye] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+
+
+/**
+ * [hold description]
+ * @param  {[type]} session [description]
+ * @param  {[type]} options [description]
+ *     useUpdate  Boolean Send UPDATE instead of re-INVITE
+ * @param  {[type]} done [description] 成功后的回调
+ * @return {[type]}         [description]
+ */
+function hold(options, done) {
+    if(adaptor.session) {
+        adaptor.session.hold(getSessionOptions(options), done);
+        debugSession('[hold] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+/**
+ * [unhold description]
+ * @param  {[type]} session [description]
+ * @param  {[type]} options [description]
+ *     useUpdate  Boolean Send UPDATE instead of re-INVITE
+ * @param  {[type]} done [description] 成功后的回调
+ * @return {[type]}         [description]
+ */
+function unhold(options, done) {
+    if(adaptor.session) {
+        adaptor.session.unhold(getSessionOptions(options), done);
+        debugSession('[unhold] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+
+
+
+/**
+ * Mutes the local audio and/or video.
+ * @param  {[type]} session [description]
+ * @param  {[type]} options [description]
+ *     audio.  Boolean Determines whether local audio must be muted
+ *     video.  Boolean Determines whether local video must be muted
+ * @return {[type]}         [description]
+ */
+function mute(options) {
+    if(adaptor.session) {
+        adaptor.session.mute(options);
+        debugSession('[mute] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+/**
+ * UnMutes the local audio and/or video.
+ * @param  {[type]} session [description]
+ * @param  {[type]} options [description]
+ *     audio.  Boolean Determines whether local audio must be muted
+ *     video.  Boolean Determines whether local video must be muted
+ * @return {[type]}         [description]
+ */
+function unmute(options) {
+    if(adaptor.session) {
+        adaptor.session.unmute(options);
+        debugSession('[unmute] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+/**
+ * @param  {Number or String} 符合DTMF标准的   eg.  sendDigit(4) or sendDigit("1234#")
+ */
+function sendDigit(tone) {
+    if(adaptor.session) {
+        adaptor.session.sendDTMF(tone);
+        debugSession('[sendDigit] %O',{
+            session: adaptor.session,
+            tone: tone
+        });
+    }
+}
+
+
+
+
+
 
 /* Emitter */
 // ==========
@@ -346,7 +509,7 @@ function login(options) {
 //  'warning',//提示用户重启浏览器  
 //  'jitterbuffer' //拨号中上报延迟信息
 var EVENTS_CUSTOM = {};
-function addEventMethod(eventType, eventHandle, scope) {
+function addEvent(eventType, eventHandle, scope) {
     if (typeof eventType === 'string') {
         EVENTS_CUSTOM[eventType] = function() {
             eventHandle.apply(scope, Array.prototype.slice.call(arguments));
@@ -365,289 +528,4 @@ function fireEvent(eventType, options) {
 
         EVENTS_CUSTOM[eventType](eventType, options);
     }
-}
-
-/*UA Event */
-// ===== 
-// 连接中  ua.on('connecting', onConnecting);
-function onConnecting(data){
-    debug('[onConnecting] %O', {
-        data: data
-    });
-}
-// 连接成功 ua.on('connected', onConnected);
-function onConnected(data){
-    this.connected = true;
-    this.reconnect = 0;
-    this.callingReconnect = false;
-    debug('[onConnected] %O', {
-        data: data
-    });
-}
-// 连接失败 ua.on('disconnected', onDisconnected);
-function onDisconnected(data){
-    this.status = C.STATUS_FAIL;
-    data = data || {};
-    var ua = this.ua || {};
-    debug('[onDisconnected] %O', {
-        data: data,
-        socket: data.socket,
-        status: ua.status,
-        ua: ua
-    });
-
-    try {
-        // ①若连接成功过之后未连接成功  ②_uaConnectError 避免重复执行 ③ 避免服务器高并发请求集结做缓冲
-        var isValidConnect = !this._timestampConnect || (Math.abs(Date.now() - this._timestampConnect)/1000 > 1);
-        if(data.error && this._uaConnectError && this._connected && isValidConnect) {
-            this._uaConnectError = 0;
-            this._timestampConnect = Date.now();
-            ua.start();
-        }
-    } catch (e) {
-        debug('[disconnectError]: %O', e );
-    }
-}
-// 注册成功 ua.on('registered', onRegistered);
-function onRegistered(data){
-    this.status = C.STATUS_SUCCESS;
-     debug('[onRegistered] %O', {
-        data: data
-    });
-}
-// 注册注销 ua.on('unregistered', onUnregistered);
-function onUnregistered(data){
-    this.status = C.STATUS_FAIL;
-     debug('[onUnregistered] %O', {
-        data: data
-    });
-
-}
-// 注册失败  ua.on('registrationFailed', onRegistrationFailed);
-function onRegistrationFailed(data){
-    this.status = C.STATUS_FAIL;
-    debug('[onRegistrationFailed] %O', {
-        data: data
-    });
-
-    var ua = this.ua;
-    if(!ua) { return ;}
-    // 连接状态  请求超时pending、响应超时 408、410、420、480  UNAVAILABLE 
-    // var isResistered = ua.isRegistered(); // 是否有注册成功过
-    var isConnected = ua.isConnected();
-
-    /* 连接状态 请求超时 */
-    var isResponseTimeout = data.cause && data.cause === 'UNAVAILABLE';
-    var isRequestTimeout = data.cause && data.cause === 'Request Timeout';
-    var isConnectTimeOut = isRequestTimeout || isResponseTimeout;
-    // 若是响应超时避免服务器集结压力过大做时间缓冲, 区间为5s
-    var isValidRegister = !this.timestampRegister || (Math.abs(Date.now() - this.timestampRegister)/1000 > 5);
-    if(isConnected && isConnectTimeOut && isValidRegister ) {
-        this.timestampRegister = Date.now();
-        debug('ws服务注册失败-重试');
-        ua.register();// 未注册成功过 或 注册成功过isResistered 则关闭 一个周期仅触发一次 ua.registered  ua.registrator.close();
-    } else {
-        var isConnectError = data.cause && data.cause === 'Connection Error';
-        this.uaConnectError = isConnectError;
-        debug('ws服务注册失败-重连 连接错误 %s', isConnectError);
-    }
-}
-
-// 获取电话，注册电话事件 ua.on('registrationFailed', onNewRTCSession);
-function onNewRTCSession(data){
-    if (data.originator === 'local') { return; }
-    debug('[onNewRTCSession] %O', {
-        data: data
-    });
-    var _session = data.session;
-    // Avoid if busy or other incoming
-    if (this.session) {
-        debug('[terminate] %O', { // debug
-            status_code: 486,
-            reason_phrase: 'Busy Here',
-            session: _session
-        });
-
-        _session.terminate({
-            status_code: 486,
-            reason_phrase: 'Busy Here'
-        });
-        return;
-    } 
-    this.session = _session;
-
-    fireEvent('ringing', {
-        type: data.request.hasHeader('Direction-Type') ? Number(data.request.getHeader('Direction-Type')) : 1
-    });
-
-    _session.on('accepted', function() {
-            // window.document.getElementById('qiyuPhone') idSelector
-        var nodePhone = window.document && (nodePhone = window.document.getElementById(this._configration.media_selectorId));
-        if (nodePhone) {
-            // Display remote stream
-            nodePhone.srcObject = _session.connection.getRemoteStreams()[0];
-        }
-        // stats.startStats(session.connection);
-    });
-    _session.on('ended', function() {
-        debug('jssip:ended');
-
-        // stats.stopStats();
-        this.session = null;
-    });
-    _session.on('failed', function() {
-        debug('jssip:failed');
-        // stats.stopStats();
-        this.session = null;
-    });
-}
-
-/* UA Methods */
-function connect () {
-      if(this.ua) {
-        this.ua.start();
-    }
-      debug('connect %s', getStackTrace());
-  }
-function disConnect () {
-    if(this.ua) {
-        this.ua.stop();
-    }
-    debug('disConnect %s', getStackTrace());
-  }
-function accept() {
-    var adaptor = this;
-    var hasAccept = false;//是否接起过
-    var _configration = adaptor._configration;
-    var answerOptions = _configration.session; //media.pcConfig;
-
-    // 重试机制白名单：3次重试
-    // var someCode = ['7','ipcc1213','gamesbluebc','wmccs','yimutian','7daichina','5050sgmw','siji','bluebc'];//这里的企业，在接起时获取媒体设备，如果没有返回，增加重试机制
-    var retryCount = 0;//重试次数
-    var retryTimer = null; //重试定时器
-
-    var  retryCorpWhiteList = _configration.meida_whitelist || []; //_configration.meida.whitelist;
-    var  TheCorp = _configration.corpCode;
-
-    debug('accept corpCode:%s', TheCorp);
-    if (retryCorpWhiteList.includes(TheCorp)) {
-        retryGetUserMedia();
-    } else {// 非白名单直接接听处理 // 非someCode里定义的企业保持原有的逻辑
-        if(adaptor.session){
-            answer(adaptor.session, answerOptions);
-        }
-    }
-
-    function retryGetUserMedia() {
-        retryCount++;
-        retryTimer = null;
-
-        debug('retry retryCount:%d', retryCount);
-
-        //重试次数小于3次时，起一个定时器，如果navigator.mediaDevices.getUserMedia没有返回，定时器触发，重试。
-        if (retryCount < 3){ 
-            retryTimer = setTimeout(retryGetUserMedia, 200);
-        }
-
-        try{
-            navigator.mediaDevices.getUserMedia({audio: true, video: false}).then(function(stream) {
-                clearTimeout(retryTimer);
-                debug('getUserMedia success hasAccept:%d', Number(hasAccept));
-
-                if(!hasAccept){//防止多次调用：如果navigator.mediaDevices.getUserMedia返回就是很慢，三次重试过了，然后同时返回成功，此时防止接起多次
-                    answerOptions.mediaStream = stream;
-                    answer(adaptor.session, answerOptions);
-                    hasAccept = true;
-                }
-
-            }).catch(function(error) {
-                debug('getUserMedia failed %O', error);
-            });
-        }catch(e){
-            console.log(e);
-        }
-    }
-}
-
-
-
-/**
- * @param  {String} 呼叫目标
- * @param  {Object} options 可选的扩展对象
- */
-function call(target, options) {
-    return this.ua.call(target, deepmerge(options || {}, {
-        extraHeaders: this.ua.__extraHeaders.slice()
-    }));
-}
-/**
- * @param  {Obejct} 可选参数用于以后扩展
- */
-function answer(session, options) {
-    session.answer(deepmerge(options || {}, {
-        extraHeaders: this.ua.__extraHeaders.slice()
-    }));
-}
-
-function bye(session, options) {
-    session.terminate(deepmerge(options || {}, {
-        extraHeaders: this.ua.__extraHeaders.slice()
-    }));
-}
-/**
- * [hold description]
- * @param  {[type]} session [description]
- * @param  {[type]} options [description]
- *     useUpdate  Boolean Send UPDATE instead of re-INVITE
- * @param  {[type]} done [description] 成功后的回调
- * @return {[type]}         [description]
- */
-function hold(session, options, done) {
-    session.hold(deepmerge(options || {}, {
-        extraHeaders: this.ua.__extraHeaders.slice()
-    }), done);
-}
-/**
- * [unhold description]
- * @param  {[type]} session [description]
- * @param  {[type]} options [description]
- *     useUpdate  Boolean Send UPDATE instead of re-INVITE
- * @param  {[type]} done [description] 成功后的回调
- * @return {[type]}         [description]
- */
-function unhold(session, options, done) {
-    session.unhold(deepmerge(options || {}, {
-        extraHeaders: this.ua.__extraHeaders.slice()
-    }), done);
-}
-
-
-
-/**
- * Mutes the local audio and/or video.
- * @param  {[type]} session [description]
- * @param  {[type]} options [description]
- *     audio.  Boolean Determines whether local audio must be muted
- *     video.  Boolean Determines whether local video must be muted
- * @return {[type]}         [description]
- */
-function mute(session, options) {
-    session.mute(options);
-}
-/**
- * UnMutes the local audio and/or video.
- * @param  {[type]} session [description]
- * @param  {[type]} options [description]
- *     audio.  Boolean Determines whether local audio must be muted
- *     video.  Boolean Determines whether local video must be muted
- * @return {[type]}         [description]
- */
-function unmute(session, options) {
-    session.unmute(options);
-}
-/**
- * @param  {Number or String} 符合DTMF标准的   eg.  sendDigit(4) or sendDigit("1234#")
- */
-function sendDigit(session, tone) {
-    session.sendDTMF(tone);
 }

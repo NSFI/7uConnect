@@ -195,7 +195,7 @@ function localstorage() {
 }
 
 }).call(this,require('_process'))
-},{"./debug":2,"_process":11}],2:[function(require,module,exports){
+},{"./debug":2,"_process":6}],2:[function(require,module,exports){
 
 /**
  * This is the common logic for both the Node.js and web browser
@@ -399,514 +399,7 @@ function coerce(val) {
   return val;
 }
 
-},{"ms":9}],3:[function(require,module,exports){
-exports = module.exports = DebugWebRTC;
-
-//webrtc statistics types
-var TYPES = {
-    TYPE_GOOG_TRACK: 'googTrack',
-    TYPE_GOOG_LIBJINGLE_SESSION: 'googLibjingleSession',
-    TYPE_GOOG_CERTIFICATE: 'googCertificate',
-    TYPE_GOOG_COMPONENT: 'googComponent',
-    TYPE_GOOG_CANDIDATE_PAIR: 'googCandidatePair',
-    TYPE_LOCAL_CANDIDATE: 'localcandidate',
-    TYPE_REMOTE_CANDIDATE: 'remotecandidate',
-    TYPE_SSRC: 'ssrc',
-    TYPE_VIDEOBWE: 'VideoBwe',
-    TYPE_ALL: 'all'
-};
-
-//内置的结果解析器
-var PARSERS = {
-    PARSER_CHECK_IF_OFFERER: 'checkIfOfferer',
-    PARSER_GET_PRINT_ALGORITHM: 'getPrintAlgorithm',
-    PARSER_CHECK_AUDIO_TRACKS: 'checkAudioTracks',
-    PARSER_CHECK_VIDEO_TRACKS: 'checkVideoTracks',
-    PARSER_GET_CONNECTION: 'getConnectioin',
-    PARSER_GET_LOCAL_CANDIDATES: 'getLocalCandidates',
-    PARSER_GET_REMOTE_CANDIDATES: 'getRemotecandidate',
-    PARSER_GET_DATA_SENT_RECEIVED: 'getDataSentReceived',
-    PARSER_GET_STREAMS: 'getStreams'
-};
-
-DebugWebRTC.TYPES = TYPES;
-DebugWebRTC.PARSERS = PARSERS;
-DebugWebRTC.freeice = require('freeice');
-
-var statsParser = DebugWebRTC.statsParser = {};
-
-/**
- * [DebugWebRTC description]
- * @param {[Object]} config  
- * @param {object} config.peer            PeerConnection instance
- * @param {number} config.interval        getStats interval
- */
-function DebugWebRTC(config) {
-
-    config = config || {};
-
-    if (!config.peer) { throw 'cannot find PeerConnection instance'; }
-
-    this.listeners = {};
-    this.peer = config.peer;
-    this.interval = config.interval || 1000;
-    this.start();
-}
-
-
-/**
- * 
- * @param  {[type]} type [description]  TYPES
- * @return {[type]}      [description]
- */
-DebugWebRTC.prototype.on = function(type, fn) {
-    if (this.listeners[type]) {
-        this.listeners[type].push(fn);
-    } else {
-        this.listeners[type] = [fn];
-    }
-};
-
-DebugWebRTC.prototype.stop = function() {
-    this.do = false;
-    clearTimeout(this.timer);
-    this.timer = null;
-};
-DebugWebRTC.prototype.start = function() {
-
-    this.stop(); //开始之前先stop，清除定时器
-
-    this.do = true; //是否要获取统计数据
-    this.timer = setTimeout(getStatsLooper.bind(this), this.interval);
-};
-DebugWebRTC.prototype.destroy = function() {
-    this.stop();
-    this.listeners = null;
-    this.peer = null;
-};
-
-function getStatsLooper() {
-    var self = this;
-
-    this.peer.getStats(function(res) {
-
-        var items = [],
-            listener = '';
-
-        res.result().forEach(function(res) {
-            var item = {};
-            res.names().forEach(function(name) {
-                item[name] = res.stat(name);
-            });
-            item.id = res.id;
-            item.type = res.type;
-            item.timestamp = res.timestamp;
-            items.push(item);
-        });
-
-        for (listener in self.listeners) {
-            if (Object.keys(TYPES).map(function(type) {
-                    return TYPES[type];
-                }).indexOf(listener) !== -1) {
-
-                emit.apply(self, [listener, items.filter(function(itm) {
-                    if (listener === TYPES.TYPE_ALL) {
-                        return true;
-                    }
-
-                    return itm.type === listener;
-                })]);
-            }
-
-            if (Object.keys(statsParser).indexOf(listener) !== -1) {
-                emit.apply(self, [listener, statsParser[listener](items)]);
-            }
-        }
-
-
-    });
-    try {
-        // failed|closed  停掉获取
-        if (this.peer.iceConnectionState.search(/failed/gi) !== -1) {
-            this.do = false;
-        }
-    } catch (e) {
-        this.do = false;
-
-    }
-
-    // second argument checks to see, if target-user is still connected.
-    if (this.do) {
-        this.timer = setTimeout(getStatsLooper.bind(this), this.interval);
-    }
-
-}
-
-
-
-function emit() {
-    var args = Array.prototype.slice.call(arguments);
-    var event = args.shift();
-    if (this.listeners[event]) {
-        this.listeners[event].forEach(function(fn) {
-            fn.apply(null, args);
-        });
-    }
-}
-
-
-statsParser.checkIfOfferer = function(results) {
-
-    for (var i = 0; i < results.length; i++) {
-        if (results[i].type === TYPES.TYPE_GOOG_LIBJINGLE_SESSION) {
-            return results[i].googInitiator === 'true';
-        }
-    }
-    return !1;
-};
-
-statsParser.getPrintAlgorithm = function(results) {
-    for (var i = 0; i < results.length; i++) {
-        if (results[i].type === TYPES.TYPE_GOOG_CERTIFICATE) {
-            return results[i].googFingerprintAlgorithm;
-        }
-    }
-    return '';
-};
-
-statsParser.checkAudioTracks = function(results) {
-
-    var audio = {
-        send: {
-            tracks: [],
-            codecs: [],
-            availableBandwidth: 0
-        },
-        recv: {
-            tracks: [],
-            codecs: [],
-            availableBandwidth: 0
-        }
-    };
-
-
-    for (var i = 0; i < results.length; i++) {
-        var ret = results[i];
-
-        if (ret.googCodecName && ret.mediaType === 'audio') {
-            var type = ret.id.split('_').pop();
-
-            if (audio[type].codecs.indexOf(ret.googCodecName) === -1) {
-                audio[type].codecs.push(ret.googCodecName);
-            }
-            if (audio[type].tracks.indexOf(ret.googTrackId)) {
-                audio[type].tracks.push(ret.googTrackId);
-            }
-            var bytes = 0;
-            if (ret.bytesSent) {
-                if (!statsParser.checkAudioTracks.prevBytesSent) {
-                    statsParser.checkAudioTracks.prevBytesSent = ret.bytesSent;
-                }
-
-                bytes = ret.bytesSent - statsParser.checkAudioTracks.prevBytesSent;
-                statsParser.checkAudioTracks.prevBytesSent = ret.bytesSent;
-
-            }
-
-            if (ret.bytesReceived) {
-                if (!statsParser.checkAudioTracks.prevBytesReceived) {
-                    statsParser.checkAudioTracks.prevBytesReceived = ret.bytesReceived;
-                }
-
-                bytes = ret.bytesReceived - statsParser.checkAudioTracks.prevBytesReceived;
-                statsParser.checkAudioTracks.prevBytesReceived = ret.bytesReceived;
-            }
-
-            audio[type].availableBandwidth = (bytes / 1024).toFixed(1);
-
-        }
-    }
-    return audio;
-};
-
-statsParser.checkVideoTracks = function(results) {
-    var video = {
-        send: {
-            tracks: [],
-            codecs: [],
-            availableBandwidth: 0,
-            resolutions: {
-                width: 0,
-                height: 0
-            }
-        },
-        recv: {
-            tracks: [],
-            codecs: [],
-            availableBandwidth: 0,
-            resolutions: {
-                width: 0,
-                height: 0
-            }
-        }
-    };
-
-
-    for (var i = 0; i < results.length; i++) {
-        var ret = results[i];
-
-        if (ret.googCodecName && ret.mediaType === 'video') {
-            var type = ret.id.split('_').pop();
-
-            if (video[type].codecs.indexOf(ret.googCodecName) === -1) {
-                video[type].codecs.push(ret.googCodecName);
-            }
-
-            if (video[type].tracks.indexOf(ret.googTrackId) === -1) {
-                video[type].tracks.push(ret.googTrackId);
-            }
-
-            if (ret.googFrameHeightReceived && ret.googFrameWidthReceived) {
-                video[type].resolutions.height = ret.googFrameHeightReceived;
-                video[type].resolutions.width = ret.googFrameWidthReceived;
-            }
-
-            if (ret.googFrameHeightSent && ret.googFrameWidthSent) {
-                video[type].resolutions.height = ret.googFrameHeightSent;
-                video[type].resolutions.width = ret.googFrameWidthSent;
-            }
-
-            var bytes = 0;
-            if (ret.bytesSent) {
-                if (!statsParser.checkVideoTracks.prevBytesSent) {
-                    statsParser.checkVideoTracks.prevBytesSent = ret.bytesSent;
-                }
-
-                bytes = ret.bytesSent - statsParser.checkVideoTracks.prevBytesSent;
-                statsParser.checkVideoTracks.prevBytesSent = ret.bytesSent;
-            }
-            if (ret.bytesReceived) {
-                if (!statsParser.checkVideoTracks.prevBytesReceived) {
-                    statsParser.checkVideoTracks.prevBytesReceived = ret.bytesReceived;
-                }
-
-                bytes = ret.bytesReceived - statsParser.checkVideoTracks.prevBytesReceived;
-                statsParser.checkVideoTracks.prevBytesReceived = ret.bytesReceived;
-            }
-            video[type].availableBandwidth = (bytes / 2014).toFixed(1);
-
-        }
-    }
-
-    return video;
-};
-
-statsParser.getLocalCandidates = function(results) {
-    var locals = [];
-
-    for (var i = 0; i < results.length; i++) {
-        var ret = results[i],
-            local = null;
-
-        if (ret.type === TYPES.TYPE_LOCAL_CANDIDATE && ret.id) {
-
-            local = {};
-
-            if (ret.candidateType) {
-                local.candidateType = ret.candidateType;
-            }
-
-            if (ret.transport) {
-                local.transport = ret.transport;
-            }
-
-            if (ret.ipAddress) {
-                local.ipAddress = ret.ipAddress + ':' + ret.portNumber;
-            }
-
-            if (ret.networkType) {
-                local.networkType = ret.networkType;
-            }
-
-            locals.push(local);
-        }
-    }
-    return locals;
-};
-
-statsParser.getRemotecandidate = function(results) {
-    var remotes = [];
-
-    for (var i = 0; i < results.length; i++) {
-        var ret = results[i],
-            remote = null;
-
-        if (ret.type === TYPES.TYPE_REMOTE_CANDIDATE && ret.id) {
-
-            remote = {};
-
-            if (ret.candidateType) {
-                remote.candidateType = ret.candidateType;
-            }
-
-            if (ret.transport) {
-                remote.transport = ret.transport;
-            }
-
-            if (ret.ipAddress) {
-                remote.ipAddress = ret.ipAddress + ':' + ret.portNumber;
-            }
-
-            if (ret.networkType) {
-                remote.networkType = ret.networkType;
-            }
-
-            remotes.push(remote);
-        }
-    }
-
-    return remotes;
-};
-
-statsParser.getConnectioin = function(results) {
-    var connection = {
-        transport: '',
-        rtt: 0,
-        localAddress: '',
-        remoteAddress: '',
-        packetsSent: 0,
-        bytesSent: 0,
-        bytesReceived: 0,
-        requestsSent: 0,
-        requestsReceived: 0,
-        responsesSent: 0,
-        responsesReceived: 0
-    };
-
-    for (var i = 0; i < results.length; i++) {
-        var ret = results[i];
-        if (ret.type === TYPES.TYPE_GOOG_CANDIDATE_PAIR && ret.googActiveConnection === 'true') {
-            connection.transport = ret.googTransportType;
-            connection.rtt = parseInt(ret.googRtt);
-            connection.localAddress = ret.googLocalAddress;
-            connection.remoteAddress = ret.googRemoteAddress;
-            connection.packetsSent = parseInt(ret.packetsSent);
-            connection.bytesSent = parseInt(ret.bytesSent);
-            connection.bytesReceived = parseInt(ret.bytesReceived);
-            connection.requestsSent = parseInt(ret.requestsSent);
-            connection.requestsReceived = parseInt(ret.requestsReceived);
-            connection.responsesSent = parseInt(ret.responsesSent);
-            connection.responsesReceived = parseInt(ret.responsesReceived);
-        }
-    }
-
-    connection.locals = statsParser.getLocalCandidates(results);
-    connection.remotes = statsParser.getRemotecandidate(results);
-
-    return connection;
-};
-
-
-statsParser.getDataSentReceived = function(results) {
-    var bytes = {
-        video: {
-            bytesSent: 0,
-            bytesReceived: 0
-        },
-        audio: {
-            bytesSent: 0,
-            bytesReceived: 0
-        }
-    };
-
-    for (var i = 0; i < results.length; i++) {
-        var ret = results[i];
-
-        if (ret.googCodecName && (ret.mediaType === 'video' || ret.mediaType === 'audio')) {
-            if (ret.bytesSent) {
-                bytes[ret.mediaType].bytesSent = parseInt(ret.bytesSent);
-            }
-            if (ret.bytesReceived) {
-                bytes[ret.mediaType].bytesReceived = parseInt(ret.bytesReceived);
-            }
-        }
-    }
-
-    return bytes;
-};
-
-statsParser.getStreams = function(results) {
-
-    var ssrc = {
-        audio: {
-            send: {
-                bytes: 0,
-                packets: 0,
-                packetsLost: 0,
-                googRtt: 0,
-                googJitterReceived: 0
-            },
-            recv: {
-                bytes: 0,
-                packets: 0,
-                packetsLost: 0,
-                googJitterReceived: 0,
-                googJitterBufferMs: 0
-            }
-        },
-        video: {
-            send: {
-                bytes: 0,
-                packets: 0,
-                packetsLost: 0,
-                googRtt: 0,
-                googEncodeUsagePercent: 0
-            },
-            recv: {
-                bytes: 0,
-                packets: 0,
-                packetsLost: 0,
-                googCurrentDelayMs: 0,
-                googJitterBufferMs: 0
-            }
-        }
-    };
-
-    for (var i = 0; i < results.length; i++) {
-        var ret = results[i];
-
-        if (ret.googCodecName && ret.type === 'ssrc' && (ret.mediaType === 'video' || ret.mediaType === 'audio')) {
-            var type = ret.id.split('_').pop();
-
-            ssrc[ret.mediaType][type].bytes = parseInt(ret.bytesReceived || ret.bytesSent);
-            ssrc[ret.mediaType][type].packets = parseInt(ret.packetsReceived || ret.packetsSent);
-            ssrc[ret.mediaType][type].packetsLost = parseInt(ret.packetsLost);
-
-            if (type === 'send') {
-                ssrc[ret.mediaType].send.googRtt = parseInt(ret.googRtt);
-
-                if (ret.mediaType === 'audio') {
-                    ssrc.audio.send.googJitterReceived = parseInt(ret.googJitterReceived);
-                } else {
-                    ssrc.video.send.googEncodeUsagePercent = parseInt(ret.googEncodeUsagePercent);
-                }
-
-            } else {
-                ssrc[ret.mediaType].recv.googJitterBufferMs = parseInt(ret.googJitterBufferMs);
-
-                if (ret.mediaType === 'audio') {
-                    ssrc.audio.recv.googJitterReceived = parseInt(ret.googJitterReceived);
-                } else {
-                    ssrc.video.recv.googCurrentDelayMs = parseInt(ret.googCurrentDelayMs);
-                }
-            }
-        }
-    }
-
-    return ssrc;
-
-};
-},{"freeice":6}],4:[function(require,module,exports){
+},{"ms":5}],3:[function(require,module,exports){
 'use strict';
 
 var isMergeableObject = function isMergeableObject(value) {
@@ -1005,7 +498,7 @@ var deepmerge_1 = deepmerge;
 
 module.exports = deepmerge_1;
 
-},{}],5:[function(require,module,exports){
+},{}],4:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -1309,135 +802,7 @@ function isUndefined(arg) {
   return arg === void 0;
 }
 
-},{}],6:[function(require,module,exports){
-/* jshint node: true */
-'use strict';
-
-var normalice = require('normalice');
-
-/**
-  # freeice
-
-  The `freeice` module is a simple way of getting random STUN or TURN server
-  for your WebRTC application.  The list of servers (just STUN at this stage)
-  were sourced from this [gist](https://gist.github.com/zziuni/3741933).
-
-  ## Example Use
-
-  The following demonstrates how you can use `freeice` with
-  [rtc-quickconnect](https://github.com/rtc-io/rtc-quickconnect):
-
-  <<< examples/quickconnect.js
-
-  As the `freeice` module generates ice servers in a list compliant with the
-  WebRTC spec you will be able to use it with raw `RTCPeerConnection`
-  constructors and other WebRTC libraries.
-
-  ## Hey, don't use my STUN/TURN server!
-
-  If for some reason your free STUN or TURN server ends up in the
-  list of servers ([stun](https://github.com/DamonOehlman/freeice/blob/master/stun.json) or
-  [turn](https://github.com/DamonOehlman/freeice/blob/master/turn.json))
-  that is used in this module, you can feel
-  free to open an issue on this repository and those servers will be removed
-  within 24 hours (or sooner).  This is the quickest and probably the most
-  polite way to have something removed (and provides us some visibility
-  if someone opens a pull request requesting that a server is added).
-
-  ## Please add my server!
-
-  If you have a server that you wish to add to the list, that's awesome! I'm
-  sure I speak on behalf of a whole pile of WebRTC developers who say thanks.
-  To get it into the list, feel free to either open a pull request or if you
-  find that process a bit daunting then just create an issue requesting
-  the addition of the server (make sure you provide all the details, and if
-  you have a Terms of Service then including that in the PR/issue would be
-  awesome).
-
-  ## I know of a free server, can I add it?
-
-  Sure, if you do your homework and make sure it is ok to use (I'm currently
-  in the process of reviewing the terms of those STUN servers included from
-  the original list).  If it's ok to go, then please see the previous entry
-  for how to add it.
-
-  ## Current List of Servers
-
-  * current as at the time of last `README.md` file generation
-
-  ### STUN
-
-  <<< stun.json
-
-  ### TURN
-
-  <<< turn.json
-
-**/
-
-var freeice = function(opts) {
-  // if a list of servers has been provided, then use it instead of defaults
-  var servers = {
-    stun: (opts || {}).stun || require('./stun.json'),
-    turn: (opts || {}).turn || require('./turn.json')
-  };
-
-  var stunCount = (opts || {}).stunCount || 2;
-  var turnCount = (opts || {}).turnCount || 0;
-  var selected;
-
-  function getServers(type, count) {
-    var out = [];
-    var input = [].concat(servers[type]);
-    var idx;
-
-    while (input.length && out.length < count) {
-      idx = (Math.random() * input.length) | 0;
-      out = out.concat(input.splice(idx, 1));
-    }
-
-    return out.map(function(url) {
-        //If it's a not a string, don't try to "normalice" it otherwise using type:url will screw it up
-        if ((typeof url !== 'string') && (! (url instanceof String))) {
-            return url;
-        } else {
-            return normalice(type + ':' + url);
-        }
-    });
-  }
-
-  // add stun servers
-  selected = [].concat(getServers('stun', stunCount));
-
-  if (turnCount) {
-    selected = selected.concat(getServers('turn', turnCount));
-  }
-
-  return selected;
-};
-
-module.exports = freeice;
-},{"./stun.json":7,"./turn.json":8,"normalice":10}],7:[function(require,module,exports){
-module.exports=[
-  "stun.l.google.com:19302",
-  "stun1.l.google.com:19302",
-  "stun2.l.google.com:19302",
-  "stun3.l.google.com:19302",
-  "stun4.l.google.com:19302",
-  "stun.ekiga.net",
-  "stun.ideasip.com",
-  "stun.schlund.de",
-  "stun.stunprotocol.org:3478",
-  "stun.voiparound.com",
-  "stun.voipbuster.com",
-  "stun.voipstunt.com",
-  "stun.voxgratia.org"
-]
-
-},{}],8:[function(require,module,exports){
-module.exports=[]
-
-},{}],9:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 /**
  * Helpers.
  */
@@ -1591,69 +956,7 @@ function plural(ms, n, name) {
   return Math.ceil(ms / n) + ' ' + name + 's';
 }
 
-},{}],10:[function(require,module,exports){
-/**
-  # normalice
-
-  Normalize an ice server configuration object (or plain old string) into a format
-  that is usable in all browsers supporting WebRTC.  Primarily this module is designed
-  to help with the transition of the `url` attribute of the configuration object to
-  the `urls` attribute.
-
-  ## Example Usage
-
-  <<< examples/simple.js
-
-**/
-
-var protocols = [
-  'stun:',
-  'turn:'
-];
-
-module.exports = function(input) {
-  var url = (input || {}).url || input;
-  var protocol;
-  var parts;
-  var output = {};
-
-  // if we don't have a string url, then allow the input to passthrough
-  if (typeof url != 'string' && (! (url instanceof String))) {
-    return input;
-  }
-
-  // trim the url string, and convert to an array
-  url = url.trim();
-
-  // if the protocol is not known, then passthrough
-  protocol = protocols[protocols.indexOf(url.slice(0, 5))];
-  if (! protocol) {
-    return input;
-  }
-
-  // now let's attack the remaining url parts
-  url = url.slice(5);
-  parts = url.split('@');
-
-  output.username = input.username;
-  output.credential = input.credential;
-  // if we have an authentication part, then set the credentials
-  if (parts.length > 1) {
-    url = parts[1];
-    parts = parts[0].split(':');
-
-    // add the output credential and username
-    output.username = parts[0];
-    output.credential = (input || {}).credential || parts[1] || '';
-  }
-
-  output.url = protocol + url;
-  output.urls = [ output.url ];
-
-  return output;
-};
-
-},{}],11:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -1839,7 +1142,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],12:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 var pkg = require('../package.json');
 
 var C = {
@@ -1995,7 +1298,7 @@ var C = {
 
 module.exports = C;
 
-},{"../package.json":40}],13:[function(require,module,exports){
+},{"../package.json":35}],8:[function(require,module,exports){
 module.exports = Dialog;
 
 
@@ -2213,7 +1516,7 @@ Dialog.prototype = {
   }
 };
 
-},{"./Constants":12,"./Dialog/RequestSender":14,"./SIPMessage":30,"./Transactions":33,"debug":1}],14:[function(require,module,exports){
+},{"./Constants":7,"./Dialog/RequestSender":9,"./SIPMessage":25,"./Transactions":28,"debug":1}],9:[function(require,module,exports){
 module.exports = DialogRequestSender;
 
 /**
@@ -2293,7 +1596,7 @@ DialogRequestSender.prototype = {
   }
 };
 
-},{"../Constants":12,"../RTCSession":22,"../RequestSender":29,"../Transactions":33}],15:[function(require,module,exports){
+},{"../Constants":7,"../RTCSession":17,"../RequestSender":24,"../Transactions":28}],10:[function(require,module,exports){
 module.exports = DigestAuthentication;
 
 
@@ -2482,7 +1785,7 @@ DigestAuthentication.prototype.toString = function() {
   return 'Digest ' + auth_params.join(', ');
 };
 
-},{"./Utils":37,"debug":1}],16:[function(require,module,exports){
+},{"./Utils":32,"debug":1}],11:[function(require,module,exports){
 /**
  * @namespace Exceptions
  * @memberOf JsSIP
@@ -2540,7 +1843,7 @@ var Exceptions = {
 
 module.exports = Exceptions;
 
-},{}],17:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 module.exports = (function(){
   /*
    * Generated by PEG.js 0.7.0.
@@ -14774,7 +14077,7 @@ module.exports = (function(){
   result.SyntaxError.prototype = Error.prototype;
   return result;
 })();
-},{"./NameAddrHeader":20,"./URI":36}],18:[function(require,module,exports){
+},{"./NameAddrHeader":15,"./URI":31}],13:[function(require,module,exports){
 /**
  * Dependencies.
  */
@@ -14823,7 +14126,7 @@ Object.defineProperties(JsSIP, {
   }
 });
 
-},{"../package.json":40,"./Constants":12,"./Exceptions":16,"./Grammar":17,"./NameAddrHeader":20,"./UA":35,"./URI":36,"./Utils":37,"./WebSocketInterface":38,"debug":1,"webrtc-adapter":49}],19:[function(require,module,exports){
+},{"../package.json":35,"./Constants":7,"./Exceptions":11,"./Grammar":12,"./NameAddrHeader":15,"./UA":30,"./URI":31,"./Utils":32,"./WebSocketInterface":33,"debug":1,"webrtc-adapter":44}],14:[function(require,module,exports){
 module.exports = Message;
 
 
@@ -15042,7 +14345,7 @@ Message.prototype.newMessage = function(originator, request) {
   });
 };
 
-},{"./Constants":12,"./Exceptions":16,"./RequestSender":29,"./SIPMessage":30,"./Transactions":33,"./Utils":37,"events":5,"util":48}],20:[function(require,module,exports){
+},{"./Constants":7,"./Exceptions":11,"./RequestSender":24,"./SIPMessage":25,"./Transactions":28,"./Utils":32,"events":4,"util":43}],15:[function(require,module,exports){
 module.exports = NameAddrHeader;
 
 
@@ -15152,7 +14455,7 @@ NameAddrHeader.parse = function(name_addr_header) {
   }
 };
 
-},{"./Grammar":17,"./URI":36}],21:[function(require,module,exports){
+},{"./Grammar":12,"./URI":31}],16:[function(require,module,exports){
 var Parser = {};
 
 module.exports = Parser;
@@ -15434,7 +14737,7 @@ Parser.parseMessage = function(data, ua) {
   return message;
 };
 
-},{"./Grammar":17,"./SIPMessage":30,"debug":1}],22:[function(require,module,exports){
+},{"./Grammar":12,"./SIPMessage":25,"debug":1}],17:[function(require,module,exports){
 /* globals RTCPeerConnection: false, RTCSessionDescription: false */
 
 module.exports = RTCSession;
@@ -18412,7 +17715,7 @@ function onunmute(options) {
   });
 }
 
-},{"./Constants":12,"./Dialog":13,"./Exceptions":16,"./RTCSession/DTMF":23,"./RTCSession/Info":24,"./RTCSession/ReferNotifier":25,"./RTCSession/ReferSubscriber":26,"./RTCSession/Request":27,"./RequestSender":29,"./SIPMessage":30,"./Timers":32,"./Transactions":33,"./Utils":37,"debug":1,"events":5,"sdp-transform":42,"util":48}],23:[function(require,module,exports){
+},{"./Constants":7,"./Dialog":8,"./Exceptions":11,"./RTCSession/DTMF":18,"./RTCSession/Info":19,"./RTCSession/ReferNotifier":20,"./RTCSession/ReferSubscriber":21,"./RTCSession/Request":22,"./RequestSender":24,"./SIPMessage":25,"./Timers":27,"./Transactions":28,"./Utils":32,"debug":1,"events":4,"sdp-transform":37,"util":43}],18:[function(require,module,exports){
 module.exports = DTMF;
 
 
@@ -18590,7 +17893,7 @@ DTMF.prototype.init_incoming = function(request) {
   }
 };
 
-},{"../Constants":12,"../Exceptions":16,"../RTCSession":22,"debug":1,"events":5,"util":48}],24:[function(require,module,exports){
+},{"../Constants":7,"../Exceptions":11,"../RTCSession":17,"debug":1,"events":4,"util":43}],19:[function(require,module,exports){
 module.exports = Info;
 
 
@@ -18706,7 +18009,7 @@ Info.prototype.init_incoming = function(request) {
   });
 };
 
-},{"../Constants":12,"../Exceptions":16,"../RTCSession":22,"debug":1,"events":5,"util":48}],25:[function(require,module,exports){
+},{"../Constants":7,"../Exceptions":11,"../RTCSession":17,"debug":1,"events":4,"util":43}],20:[function(require,module,exports){
 module.exports = ReferNotifier;
 
 
@@ -18768,7 +18071,7 @@ ReferNotifier.prototype.notify = function(code, reason) {
   });
 };
 
-},{"../Constants":12,"./Request":27,"debug":1}],26:[function(require,module,exports){
+},{"../Constants":7,"./Request":22,"debug":1}],21:[function(require,module,exports){
 module.exports = ReferSubscriber;
 
 
@@ -18932,7 +18235,7 @@ function removeSubscriber() {
   this.session.referSubscriber = null;
 }
 
-},{"../Constants":12,"../Grammar":17,"./Request":27,"debug":1,"events":5,"util":48}],27:[function(require,module,exports){
+},{"../Constants":7,"../Grammar":12,"./Request":22,"debug":1,"events":4,"util":43}],22:[function(require,module,exports){
 module.exports = Request;
 
 /**
@@ -19022,7 +18325,7 @@ Request.prototype.onDialogError = function() {
   if (this.eventHandlers.onDialogError) { this.eventHandlers.onDialogError(); }
 };
 
-},{"../Constants":12,"../Exceptions":16,"../RTCSession":22,"debug":1}],28:[function(require,module,exports){
+},{"../Constants":7,"../Exceptions":11,"../RTCSession":17,"debug":1}],23:[function(require,module,exports){
 module.exports = Registrator;
 
 
@@ -19350,7 +18653,7 @@ Registrator.prototype = {
 };
 
 
-},{"./Constants":12,"./RequestSender":29,"./SIPMessage":30,"./Utils":37,"debug":1}],29:[function(require,module,exports){
+},{"./Constants":7,"./RequestSender":24,"./SIPMessage":25,"./Utils":32,"debug":1}],24:[function(require,module,exports){
 module.exports = RequestSender;
 
 
@@ -19496,7 +18799,7 @@ RequestSender.prototype = {
   }
 };
 
-},{"./Constants":12,"./DigestAuthentication":15,"./Transactions":33,"./UA":35,"debug":1}],30:[function(require,module,exports){
+},{"./Constants":7,"./DigestAuthentication":10,"./Transactions":28,"./UA":30,"debug":1}],25:[function(require,module,exports){
 module.exports = {
   OutgoingRequest: OutgoingRequest,
   IncomingRequest: IncomingRequest,
@@ -20122,7 +19425,7 @@ function IncomingResponse() {
 
 IncomingResponse.prototype = new IncomingMessage();
 
-},{"./Constants":12,"./Grammar":17,"./NameAddrHeader":20,"./Utils":37,"debug":1,"sdp-transform":42}],31:[function(require,module,exports){
+},{"./Constants":7,"./Grammar":12,"./NameAddrHeader":15,"./Utils":32,"debug":1,"sdp-transform":37}],26:[function(require,module,exports){
 module.exports = Socket;
 
 /**
@@ -20201,7 +19504,7 @@ Socket.isSocket = function(socket) {
   return true;
 };
 
-},{"./Grammar":17,"./Utils":37,"debug":1}],32:[function(require,module,exports){
+},{"./Grammar":12,"./Utils":32,"debug":1}],27:[function(require,module,exports){
 var T1 = 500,
   T2 = 4000,
   T4 = 5000;
@@ -20226,7 +19529,7 @@ var Timers = {
 
 module.exports = Timers;
 
-},{}],33:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 module.exports = {
   C: null,
   NonInviteClientTransaction: NonInviteClientTransaction,
@@ -20916,7 +20219,7 @@ function checkTransaction(ua, request) {
   }
 }
 
-},{"./Constants":12,"./Timers":32,"debug":1,"events":5,"util":48}],34:[function(require,module,exports){
+},{"./Constants":7,"./Timers":27,"debug":1,"events":4,"util":43}],29:[function(require,module,exports){
 module.exports = Transport;
 
 /**
@@ -21212,7 +20515,7 @@ function getSocket() {
   this.socket = candidates[idx].socket;
 }
 
-},{"./Socket":31,"debug":1}],35:[function(require,module,exports){
+},{"./Socket":26,"debug":1}],30:[function(require,module,exports){
 module.exports = UA;
 
 
@@ -22439,7 +21742,7 @@ function onTransportData(data) {
  }
 }
 
-},{"./Constants":12,"./Exceptions":16,"./Grammar":17,"./Message":19,"./Parser":21,"./RTCSession":22,"./Registrator":28,"./SIPMessage":30,"./Socket":31,"./Transactions":33,"./Transport":34,"./URI":36,"./Utils":37,"./sanityCheck":39,"debug":1,"events":5,"util":48}],36:[function(require,module,exports){
+},{"./Constants":7,"./Exceptions":11,"./Grammar":12,"./Message":14,"./Parser":16,"./RTCSession":17,"./Registrator":23,"./SIPMessage":25,"./Socket":26,"./Transactions":28,"./Transport":29,"./URI":31,"./Utils":32,"./sanityCheck":34,"debug":1,"events":4,"util":43}],31:[function(require,module,exports){
 module.exports = URI;
 
 
@@ -22651,7 +21954,7 @@ URI.parse = function(uri) {
   }
 };
 
-},{"./Constants":12,"./Grammar":17,"./Utils":37}],37:[function(require,module,exports){
+},{"./Constants":7,"./Grammar":12,"./Utils":32}],32:[function(require,module,exports){
 var Utils = {};
 
 module.exports = Utils;
@@ -23100,7 +22403,7 @@ Utils.closeMediaStream = function(stream) {
   }
 };
 
-},{"./Constants":12,"./Grammar":17,"./URI":36}],38:[function(require,module,exports){
+},{"./Constants":7,"./Grammar":12,"./URI":31}],33:[function(require,module,exports){
 module.exports = WebSocketInterface;
 
 /**
@@ -23250,7 +22553,7 @@ function onError(e) {
   debugerror('WebSocket ' + this.url + ' error: '+ e);
 }
 
-},{"./Grammar":17,"debug":1}],39:[function(require,module,exports){
+},{"./Grammar":12,"debug":1}],34:[function(require,module,exports){
 module.exports = sanityCheck;
 
 
@@ -23477,7 +22780,7 @@ function reply(status_code) {
   transport.send(response);
 }
 
-},{"./Constants":12,"./SIPMessage":30,"./Utils":37,"debug":1}],40:[function(require,module,exports){
+},{"./Constants":7,"./SIPMessage":25,"./Utils":32,"debug":1}],35:[function(require,module,exports){
 module.exports={
   "_from": "git+https://github.com/NSFI/JsSIP.git#qiyu/3.14",
   "_id": "qiyujssip@3.0.13",
@@ -23569,7 +22872,7 @@ module.exports={
   "version": "3.0.13"
 }
 
-},{}],41:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 var grammar = module.exports = {
   v: [{
     name: 'version',
@@ -24065,7 +23368,7 @@ Object.keys(grammar).forEach(function (key) {
   });
 });
 
-},{}],42:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
 var parser = require('./parser');
 var writer = require('./writer');
 
@@ -24078,7 +23381,7 @@ exports.parseRemoteCandidates = parser.parseRemoteCandidates;
 exports.parseImageAttributes = parser.parseImageAttributes;
 exports.parseSimulcastStreamList = parser.parseSimulcastStreamList;
 
-},{"./parser":43,"./writer":44}],43:[function(require,module,exports){
+},{"./parser":38,"./writer":39}],38:[function(require,module,exports){
 var toIntIfInt = function (v) {
   return String(Number(v)) === v ? Number(v) : v;
 };
@@ -24204,7 +23507,7 @@ exports.parseSimulcastStreamList = function (str) {
   });
 };
 
-},{"./grammar":41}],44:[function(require,module,exports){
+},{"./grammar":36}],39:[function(require,module,exports){
 var grammar = require('./grammar');
 
 // customized util.format - discards excess arguments and can void middle ones
@@ -24320,7 +23623,7 @@ module.exports = function (session, opts) {
   return sdp.join('\r\n') + '\r\n';
 };
 
-},{"./grammar":41}],45:[function(require,module,exports){
+},{"./grammar":36}],40:[function(require,module,exports){
  /* eslint-env node */
 'use strict';
 
@@ -24928,7 +24231,7 @@ SDPUtils.isRejected = function(mediaSection) {
 // Expose public methods.
 module.exports = SDPUtils;
 
-},{}],46:[function(require,module,exports){
+},{}],41:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -24953,14 +24256,14 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],47:[function(require,module,exports){
+},{}],42:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],48:[function(require,module,exports){
+},{}],43:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -25550,7 +24853,7 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":47,"_process":11,"inherits":46}],49:[function(require,module,exports){
+},{"./support/isBuffer":42,"_process":6,"inherits":41}],44:[function(require,module,exports){
 /*
  *  Copyright (c) 2016 The WebRTC project authors. All Rights Reserved.
  *
@@ -25652,7 +24955,7 @@ function hasOwnProperty(obj, prop) {
   }
 })();
 
-},{"./chrome/chrome_shim":50,"./edge/edge_shim":52,"./firefox/firefox_shim":55,"./safari/safari_shim":57,"./utils":58}],50:[function(require,module,exports){
+},{"./chrome/chrome_shim":45,"./edge/edge_shim":47,"./firefox/firefox_shim":50,"./safari/safari_shim":52,"./utils":53}],45:[function(require,module,exports){
 
 /*
  *  Copyright (c) 2016 The WebRTC project authors. All Rights Reserved.
@@ -26074,7 +25377,7 @@ module.exports = {
   shimGetUserMedia: require('./getusermedia')
 };
 
-},{"../utils.js":58,"./getusermedia":51}],51:[function(require,module,exports){
+},{"../utils.js":53,"./getusermedia":46}],46:[function(require,module,exports){
 /*
  *  Copyright (c) 2016 The WebRTC project authors. All Rights Reserved.
  *
@@ -26295,7 +25598,7 @@ module.exports = function() {
   }
 };
 
-},{"../utils.js":58}],52:[function(require,module,exports){
+},{"../utils.js":53}],47:[function(require,module,exports){
 /*
  *  Copyright (c) 2016 The WebRTC project authors. All Rights Reserved.
  *
@@ -26354,7 +25657,7 @@ module.exports = {
   }
 };
 
-},{"../utils":58,"./getusermedia":53,"./rtcpeerconnection_shim":54}],53:[function(require,module,exports){
+},{"../utils":53,"./getusermedia":48,"./rtcpeerconnection_shim":49}],48:[function(require,module,exports){
 /*
  *  Copyright (c) 2016 The WebRTC project authors. All Rights Reserved.
  *
@@ -26388,7 +25691,7 @@ module.exports = function() {
   };
 };
 
-},{}],54:[function(require,module,exports){
+},{}],49:[function(require,module,exports){
 /*
  *  Copyright (c) 2017 The WebRTC project authors. All Rights Reserved.
  *
@@ -27769,7 +27072,7 @@ module.exports = function(edgeVersion) {
   return RTCPeerConnection;
 };
 
-},{"sdp":45}],55:[function(require,module,exports){
+},{"sdp":40}],50:[function(require,module,exports){
 /*
  *  Copyright (c) 2016 The WebRTC project authors. All Rights Reserved.
  *
@@ -27961,7 +27264,7 @@ module.exports = {
   shimGetUserMedia: require('./getusermedia')
 };
 
-},{"../utils":58,"./getusermedia":56}],56:[function(require,module,exports){
+},{"../utils":53,"./getusermedia":51}],51:[function(require,module,exports){
 /*
  *  Copyright (c) 2016 The WebRTC project authors. All Rights Reserved.
  *
@@ -28126,7 +27429,7 @@ module.exports = function() {
   };
 };
 
-},{"../utils":58}],57:[function(require,module,exports){
+},{"../utils":53}],52:[function(require,module,exports){
 /*
  *  Copyright (c) 2016 The WebRTC project authors. All Rights Reserved.
  *
@@ -28269,7 +27572,7 @@ module.exports = {
   // shimPeerConnection: safariShim.shimPeerConnection
 };
 
-},{}],58:[function(require,module,exports){
+},{}],53:[function(require,module,exports){
 /*
  *  Copyright (c) 2016 The WebRTC project authors. All Rights Reserved.
  *
@@ -28438,7 +27741,7 @@ module.exports = {
   detectBrowser: utils.detectBrowser.bind(utils)
 };
 
-},{}],59:[function(require,module,exports){
+},{}],54:[function(require,module,exports){
 module.exports={
   "name": "qiyuconnect",
   "title": "QiyuAdaptor",
@@ -28491,111 +27794,7 @@ module.exports={
   }
 }
 
-},{}],60:[function(require,module,exports){
-/**
- * Dependencies.
- */
-
-var pkg = require('../package.json');
-var JsSIP = require('qiyujssip');
-var debug = JsSIP.debug('QiyuConnect');
-var deepmerge = require('deepmerge');
-
-
-debug('version %s', pkg.version);
-
-
-var QiyuAdaptor = module.exports = {
-    init: init,
-    getCause: getCause,
-    accept: accept, // 接起
-    disConnect: disConnect, // 断开连接
-    connect: connect, // 重新连接
-    login: login,
-    call: call,
-    answer:  function(options) {
-        if(this.session) {
-            answer(this.session, options);
-        }
-    },
-    bye: function(options) {
-        if(this.session) {
-            bye(this.session, options);
-        }
-    },
-    sendDigit: function(tone) {
-        if(this.session) { 
-            sendDigit(this.session, tone);
-        }
-    },
-    addEventMethod: addEventMethod
-};
-
-Object.defineProperties(QiyuAdaptor, {
-    name: {
-        get: function() {
-            return pkg.title;
-        }
-    },
-    version: {
-        get: function() {
-            return pkg.version;
-        }
-    }
-});
-module.QiyuConnect = {
-    Utils: JsSIP.Utils,
-    init: init,
-    getCause: getCause,
-    accept: accept, // 接起
-    disConnect: disConnect, // 断开连接
-    connect: connect, // 重新连接
-    login: login,
-    call: call,
-    answer: answer,
-    bye: bye,
-    hold: hold,
-    unhold: unhold,
-    mute: mute,
-    unmute: unmute,
-    sendDigit: sendDigit,
-    debug: JsSIP.debug,
-    addEventMethod: addEventMethod,
-    DebugWebRTC: require('debugwebrtc')
-};
-
-/* Object.defineProperties(QiyuConnect, {
-    name: {
-        get: function() {
-            return pkg.siptitle;
-        }
-    },
-    version: {
-        get: function() {
-            return pkg.sipversion;
-        }
-    }
-}); */
-
-var C = {
-    STATUS_SUCCESS: 0, // READY 准备好
-    STATUS_INIT: 1, // 正在初始化
-    STATUS_RETRY: 6,// CONNECT_NOTREADY 连接初始化未准备好
-    STATUS_FAIL: 2, // CONNECT_FAIL 连接初始化失败
-    STATUS_MIC_NOT: 3, // 未找到麦克风
-    STATUS_MIC_UN: 4,
-    STATUS_UNSAFE: 5, //非安全模式，即使用http登陆
-    Cause: {
-        '0': '',
-        '1': '电话功能尚未初始化完成，请刷新或稍后重试!',
-        '2': '电话功能初始化失败，请刷新或稍后重试!',
-        '3': '未找到可用的麦克风，请检查麦克风设置并刷新页面重试',
-        '4': '麦克风被禁用，请检查麦克风设置并刷新页面重试',
-        '5': '非安全模式不允许使用音频，请切换成HTTPS方式登录后使用',
-        '6': '电话功能尚未初始化完成，正在努力工作中，请刷新或稍后重试!',
-    },
-};
-
+},{}],55:[function(require,module,exports){
 var config = {
   // business
   defaultConfig: {
@@ -28603,32 +27802,23 @@ var config = {
       password:  null, // required
       /* SIP account. */
       uri: {
-        // sip_portocol: null, // required
-        // username  : null,  // required
-        // sip_domain: null,  // required
-        // sip_transport: null,
         portocol: 'sip:', // required
         account: null, // required
-        domain: '@cc.qiyukf.com'  // required
+        domain: ''  // required
+        // transport: null,
       },
       portocol: null, // contant_uri -> transport ; ua sockets -> portocol
       pcConfig: null,
       /* Connection options. */
-      socket: {
-        type: 0, // 0: nlb(National Load Balancing) 固定服务   1: lbs(Location Based Service) 动态服务   // required
-        // socket: null,  // required
-        nlb: null,  // https://aws.amazon.com/cn/blogs/china/overview-of-nlb/
-        lbsAPI: null,  //  
-        lbsLocal: null, // []  selectable
-        lbsRemote: null, // [] 
-      },
+      socket_nlb: '',  // https://aws.amazon.com/cn/blogs/china/overview-of-nlb/
+      socket_lbs: {}, // {api:'', localList:[], remoteList:[] }
       /* session Options */
       // eventHandlers: null, //{}
-
       /* bussiness corporation  */
       // bu_extraHeaders: {},
-      meida_whitelist: [], //
-      corpCode: '',  // required
+      corpCode: '',  // 选填
+      media_selectorId: '', // required  autoCreateMediaDom 自动创建媒体对象
+      meida_whitelist: [], // required
       appId: ''  // required
   },
 
@@ -28688,7 +27878,13 @@ var config = {
         // -
         // sessionTimersExpires: JsSIP_C.SESSION_EXPIRES  // max: JsSIP_C.MIN_SESSION_EXPIRES
     },
-    
+    socket: {
+      type: 0, // 0: nlb(National Load Balancing) 固定服务   1: lbs(Location Based Service) 动态服务   // required
+      url: null, // required
+      lbsAPI: '',
+      lbsLocal: [],
+      lbsRemote: [],
+    },
     extraHeaders: null
   },
   load: function(target, src) {
@@ -28703,7 +27899,7 @@ var config = {
       target.ua.uri = _uri;
       var portocol = src.portocol || 'wss';//location.protocol.replace('http', 'ws').replace(':','');
       target.ua.contact_uri = _uri+ ';transport='+portocol;
-      target.socket_nlb = src.socket_nlb;
+      target.socket.url = src.socket_nlb;
       target.media_selectorId = src.media_selectorId;
       target.meida_whitelist = src.meida_whitelist;
       target.corpCode = src.corpCode;
@@ -28712,24 +27908,118 @@ var config = {
   }
 };
 
+module.exports = config;
+},{}],56:[function(require,module,exports){
+/**
+ * Dependencies.
+ */
+var pkg = require('../package.json');
+var JsSIP = require('qiyujssip');
+var deepmerge = require('deepmerge');
+var debug = JsSIP.debug('QiyuConnect');
+var debugUA = JsSIP.debug('QiyuUA');
+var debugMethod = JsSIP.debug('QiyuMethod');
+var debugSession = JsSIP.debug('QiyuSession');
 
-function init(configration){
-    this.status = C.STATUS_INIT;
-    var adaptor = this;
+
+var config = require('./Config.js');
+
+debug('version %s', pkg.version);
+
+var adaptor = {};
+var uaEventHandlers = {}; // 代理事件
+
+var QiyuAdaptor = module.exports = {
+    status: adaptor.status,
+    getStatus: getStatus,
+    getCause: getCause,
+    call: call,
+    init: init,
+    connect: function() {// 重新连接
+        if(adaptor.ua) {
+            adaptor.ua.start();
+        }
+    },
+    disconnect: function() { // 断开连接
+        if(adaptor.ua) {
+            adaptor.ua.stop();
+        }
+    },
+    bye: bye,
+    accept: accept,
+    answer: answer,
+    mute: mute,
+    unmute: unmute,
+    hold: hold,
+    unhold: unhold,
+    sendDigit: sendDigit,
+    addEventMethod: addEvent,
+    addEvent: addEvent
+
+};
+Object.defineProperties(QiyuAdaptor, {
+    name: {
+        get: function() {
+            return pkg.title;
+        }
+    },
+    version: {
+        get: function() {
+            return pkg.version;
+        }
+    }
+});
+
+//  代理状态
+var C = {
+    STATUS_SUCCESS: 0, // READY 准备好
+    STATUS_INIT: 1, // 正在初始化
+    STATUS_RETRY: 6,// CONNECT_NOTREADY 连接初始化未准备好
+    STATUS_FAIL: 2, // CONNECT_FAIL 连接初始化失败
+    STATUS_MIC_NOT: 3, // 未找到麦克风
+    STATUS_MIC_UN: 4,
+    STATUS_UNSAFE: 5, //非安全模式，即使用http登陆
+    Cause: {
+        '0': '',
+        '1': '电话功能尚未初始化完成，请刷新或稍后重试!',
+        '2': '电话功能初始化失败，请刷新或稍后重试!',
+        '3': '未找到可用的麦克风，请检查麦克风设置并刷新页面重试',
+        '4': '麦克风被禁用，请检查麦克风设置并刷新页面重试',
+        '5': '非安全模式不允许使用音频，请切换成HTTPS方式登录后使用',
+        '6': '电话功能尚未初始化完成，正在努力工作中，请刷新或稍后重试!',
+    },
+};
+
+function getStatus() {
+    return {
+        STATUS_SUCCESS: 0, // READY 准备好
+        STATUS_INIT: 1, // 正在初始化
+        STATUS_RETRY: 6,// CONNECT_NOTREADY 连接初始化未准备好
+        STATUS_FAIL: 2, // CONNECT_FAIL 连接初始化失败
+        STATUS_MIC_NOT: 3, // 未找到麦克风
+        STATUS_MIC_UN: 4,
+        STATUS_UNSAFE: 5, //非安全模式，即使用http登陆
+    };
+}
+
+function getCause(){
+    return C.Cause[adaptor.status];
+}
+
+
+/**
+ * 
+ * @param {*} options 
+ */
+function init(options){
+     adaptor.status = C.STATUS_INIT;
     try{
         navigator.mediaDevices.getUserMedia({
-                audio: true
+            audio: true
         })
         .then(function() {
-            _loadConfig(configration);
-            var _configration = adaptor._configration;
-            var config = {
-                ua: _configration.ua,
-                url: _configration.socket_nlb, 
-                extraHeaders: _configration.extraHeaders
-            };
-            console.log(_configration, config);
-            login(config);
+            _loadConfig(options);
+            initSIPUA();
         })
         .catch(function(error) {
             debug('getUserMediaError %O', error);
@@ -28751,81 +28041,372 @@ function init(configration){
     }
 }
 
-function _loadConfig(configration){
+function _loadConfig(options){
     var target = Object.assign({}, config.settings);
 
-    var src = Object.assign({}, config.defaultConfig, configration ); 
-    this._configration = config.load(target, src);
+    var src = Object.assign({}, config.defaultConfig, options ); 
+    adaptor._configration = config.load(target, src);
+    return target;
 }
 
-function getCause(){
-    return C.Cause[this.status];
-}
-
-function getStackTrace() {
-    var obj = {};
-    Error.captureStackTrace(obj, getStackTrace);
-    return obj.stack;
-}
-
-/**
- * @param {Options}
- *   @param url [String] eg. "ws://59.111.96.125:5066"
- *   @param ua [Object] 
- *      @param  uri [String] eg. "sip:1002@59.111.96.125"
- *      @optinal param  display_name 
- *      @optinal param  password
- *      @optional param contact_uri eg. "sip:1002@59.111.96.125"
- *   @optinal param callback [Function] 回掉函数 arguments[0]:type 事件类型  
- *   @optinal param extraHeaders: Append custom headers to every REGISTER / un-REGISTER request. They can be overriden at any time.
- */
-function login(options) {
-
-    /**
-     * 事件通知回掉函数
-     * @param  {[type]} type [description]
-     * @return {[type]}      [description]
-     */
-    /* function on(type) {
-        return function(data) {
-            if (JsSIP.Utils.isFunction(options.callback)) {
-                debug('%s:%O', type, data);
-                options.callback(type, data);
-            } else {
-                debug('no callback function!');
-            }
-        };
-    }
- */
+var ua = null;
+function initSIPUA(){
     try {
+        var _configration = adaptor._configration;
 
-        var ua = this.ua = new JsSIP.UA(deepmerge({
-            sockets: new JsSIP.WebSocketInterface(options.url)
-        }, options.ua, true));
+       var uaOptions = deepmerge({
+            sockets: new JsSIP.WebSocketInterface(_configration.socket.url)
+        }, _configration.ua, true);
 
-
-        ua.__extraHeaders = options.extraHeaders; //缓存extraHeaders信息，其它接口使用
-        ua.registrator().setExtraHeaders(ua.__extraHeaders);
+        ua = new JsSIP.UA(uaOptions);
+ 
+        ua.registrator().setExtraHeaders(_configration.extraHeaders);
         ua.start();
-        /* ua.on('connecting', on('connecting'));
-        ua.on('connected', on('connected'));
-        ua.on('disconnected', on('disconnected'));
-        ua.on('registered', on('registered'));
-        ua.on('unregistered', on('unregistered'));
-        ua.on('registrationFailed', on('registrationFailed'));
-        ua.on('newRTCSession', on('newRTCSession')); */
-        ua.on('connecting', onConnecting);
-        ua.on('connected', onConnected);
-        ua.on('disconnected', onDisconnected);
-        ua.on('registered', onRegistered);
-        ua.on('unregistered', onUnregistered);
-        ua.on('registrationFailed', onRegistrationFailed);
-        ua.on('newRTCSession', onNewRTCSession);
+
+        
+        ua.on('connecting', onUAEvent('connecting'));
+        ua.on('connected', onUAEvent('connected'));
+        ua.on('disconnected', onUAEvent('disconnected'));
+        ua.on('registered', onUAEvent('registered'));
+        ua.on('unregistered', onUAEvent('unregistered'));
+        ua.on('registrationFailed', onUAEvent('registrationFailed'));
+        ua.on('newRTCSession', onUAEvent('newRTCSession'));
+        // ua.on('connecting', onConnecting);
+        // ua.on('connected', onConnected);
+        // ua.on('disconnected', onDisconnected);
+        // ua.on('registered', onRegistered);
+        // ua.on('unregistered', onUnregistered);
+        // ua.on('registrationFailed', onRegistrationFailed);
+        // ua.on('newRTCSession', onNewRTCSession);
 
     } catch (error) {
         debug('login error %s', error.message);
     }
 }
+
+function onUAEvent(type){
+    return function(data) {
+        debugUA('[emitUAEvent] type: %s, data: %O', type, data);
+        if(uaEventHandlers.hasOwnProperty(type) &&
+            Object.prototype.toString.call(uaEventHandlers[type]) === '[object Function]'
+            ){
+            uaEventHandlers[type].call(adaptor, data);
+        }
+    };
+}
+
+uaEventHandlers = {
+    connected: function(data){
+        this.connected = true;
+        this.reconnect = 0;
+        this.callingReconnect = false;
+        debugUA('[onConnected] %O',{
+            ws: this._configration.socket.url || '',
+            data: data
+        });
+    },
+    // 注册成功 ua.on('registered', onRegistered);
+    registered: function() {
+        this.status = C.STATUS_SUCCESS;
+    },
+    // 注册注销 ua.on('unregistered', onUnregistered);
+    unregistered: function(data){
+        this.status = C.STATUS_FAIL;
+        debugUA('[onUnregistered] %O', data || {});
+    },
+    // 注册失败  ua.on('registrationFailed', onRegistrationFailed);
+    registrationFailed: function(data){
+        this.status =  C.STATUS_FAIL;
+        var failedCause = 'ws服务注册失败-重连 连接错误';
+        // 连接状态  请求超时pending、响应超时 408、410、420、480  UNAVAILABLE 
+        var isConnected = ua.isConnected();
+
+        /* 连接状态 请求超时 */
+        var isResponseTimeout = data.cause && data.cause === 'UNAVAILABLE';
+        var isRequestTimeout = data.cause && data.cause === 'Request Timeout';
+        var isConnectTimeOut = isRequestTimeout || isResponseTimeout;
+        // 若是响应超时避免服务器集结压力过大做时间缓冲, 区间为5s
+        var isValidRegister = !this.timestampRegister || (Math.abs(Date.now() - this.timestampRegister)/1000 > 5);
+        if(isConnected && isConnectTimeOut && isValidRegister ) {
+            this.timestampRegister = Date.now();
+            failedCause = 'ws服务注册失败-重试';
+            ua.register();// 未注册成功过 或 注册成功过isResistered 则关闭 一个周期仅触发一次 ua.registered  ua.registrator.close();
+        } else {
+            var isConnectError = data.cause && data.cause === 'Connection Error';
+            this.uaConnectError = isConnectError;
+        }
+
+        debugUA('[onRegistrationFailed] %O', {
+            cause: failedCause,
+            data: data
+        });
+    },
+    // 连接失败 ua.on('disconnected', onDisconnected);
+    disconnected: function(data){
+        this.status =  C.STATUS_FAIL;
+        var socketConfig = this._configration.socket;
+        if(socketConfig.type){
+            socketDisconnectedNLB.apply(this, data);
+        }
+        debugUA('[onDisconnected] %O', {
+            data: data || {},
+            ua: ua || {},
+            socketConfig: socketConfig
+        });
+    },
+    // 获取电话，注册电话事件 ua.on('registrationFailed', onNewRTCSession);
+    newRTCSession: function(data){
+        debug('[onNewRTCSession] %O', {
+            data: data
+        });
+        if (data.originator === 'local') { return; }
+
+        debugUA('[onNewRTCSession] %O', {
+            data: data
+        });
+        var _session = data.session;
+        // Avoid if busy or other incoming
+        if (adaptor._session) {
+            debug('[terminate] %O', { // debug
+                status_code: 486,
+                reason_phrase: 'Busy Here',
+                session: _session
+            });
+
+            _session.terminate({
+                status_code: 486,
+                reason_phrase: 'Busy Here'
+            });
+            return;
+        }
+        
+        adaptor._session = _session;
+
+        fireEvent('ringing', {
+            type: data.request.hasHeader('Direction-Type') ? Number(data.request.getHeader('Direction-Type')) : 1
+        });
+
+        _session.on('accepted', function() {
+                // window.document.getElementById('qiyuPhone') idSelector
+            var nodePhone = window.document && (nodePhone = window.document.getElementById(adaptor._configration.media_selectorId));
+            if (nodePhone) {
+                // Display remote stream
+                nodePhone.srcObject = _session.connection.getRemoteStreams()[0];
+            }
+            // stats.startStats(session.connection);
+        });
+        _session.on('ended', function() {
+            debug('jssip:ended');
+
+            // stats.stopStats();
+            adaptor._session = null;
+        });
+        _session.on('failed', function() {
+            debug('jssip:failed');
+            // stats.stopStats();
+            adaptor._session = null;
+        });
+
+    }
+};
+
+function socketDisconnectedNLB(data){
+    try {
+        // ①若连接成功过之后未连接成功  ②_uaConnectError 避免重复执行 ③ 避免服务器高并发请求集结做缓冲
+        var isValidConnect = !this._timestampConnect || (Math.abs(Date.now() - this._timestampConnect)/1000 > 1);
+        if(data.error && this._uaConnectError && this._connected && isValidConnect) {
+            this._uaConnectError = 0;
+            this._timestampConnect = Date.now();
+            this.ua.start();
+        }
+    } catch (e) {
+        console.log('disconnect error');
+    }
+}
+
+
+//===== Methods
+var _sessionCommonOptions = null;
+function getSessionOptions(options, overwrite){
+    if(!_sessionCommonOptions) {
+        _sessionCommonOptions = {   
+            extraHeaders: adaptor._configration.extraHeaders.slice() 
+        };
+    }
+    return deepmerge(options || {}, _sessionCommonOptions, overwrite || false);
+}
+
+// var uaMethodHandlers = {};
+/**
+ * @param  {String} 呼叫目标
+ * @param  {Object} options 可选的扩展对象
+ */
+function call(target, options) {
+    return adaptor.ua.call(target, deepmerge(options || {}, {
+        extraHeaders: adaptor._configration.extraHeaders.slice()
+    }));
+}
+function accept(options) {
+    var hasAccept = false;//是否接起过
+    var _configration = adaptor._configration;
+    var answerOptions = _configration.session; //media.pcConfig;
+
+    // 重试机制白名单：3次重试
+    // var someCode = ['7','ipcc1213','gamesbluebc','wmccs','yimutian','7daichina','5050sgmw','siji','bluebc'];//这里的企业，在接起时获取媒体设备，如果没有返回，增加重试机制
+    var retryCount = 0;//重试次数
+    var retryTimer = null; //重试定时器
+
+    var  retryCorpWhiteList = _configration.meida_whitelist || []; //_configration.meida.whitelist;
+    var  TheCorp = _configration.corpCode;
+
+    debugMethod('[accept] corpCode:%s options: %O', TheCorp, options);
+    if (retryCorpWhiteList.includes(TheCorp)) {
+        retryGetUserMedia();
+    } else {// 非白名单直接接听处理 // 非someCode里定义的企业保持原有的逻辑
+        if(adaptor.session){
+            answer(adaptor.session, answerOptions);
+        }
+    }
+
+    function retryGetUserMedia() {
+        retryCount++;
+        retryTimer = null;
+        //重试次数小于3次时，起一个定时器，如果navigator.mediaDevices.getUserMedia没有返回，定时器触发，重试。
+        if (retryCount < 3){ 
+            retryTimer = setTimeout(retryGetUserMedia, 200);
+        }
+
+        try{
+            navigator.mediaDevices.getUserMedia({audio: true, video: false}).then(function(stream) {
+                clearTimeout(retryTimer);
+                debugMethod('[accept] getUserMedia success. retryCount:%d hasAccept:%d', retryCount, Number(hasAccept));
+
+                if(!hasAccept){//防止多次调用：如果navigator.mediaDevices.getUserMedia返回就是很慢，三次重试过了，然后同时返回成功，此时防止接起多次
+                    answerOptions.mediaStream = stream;
+                    answer(adaptor.session, answerOptions);
+                    hasAccept = true;
+                }
+
+            }).catch(function(error) {
+                debugMethod('[accept] retryCount:%d getUserMedia failed %O', retryCount, error);
+            });
+        }catch(e){
+            console.log(e);
+        }
+    }
+}
+/**
+ * @param  {Obejct} 可选参数用于以后扩展
+ */
+function answer(options) {
+    if(adaptor.session) {
+        adaptor.session.answer(getSessionOptions(options));
+        debugSession('[answer] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+
+function bye(options) {
+    if(adaptor.session) {
+        adaptor.session.terminate(getSessionOptions(options));
+        debugSession('[bye] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+
+
+/**
+ * [hold description]
+ * @param  {[type]} session [description]
+ * @param  {[type]} options [description]
+ *     useUpdate  Boolean Send UPDATE instead of re-INVITE
+ * @param  {[type]} done [description] 成功后的回调
+ * @return {[type]}         [description]
+ */
+function hold(options, done) {
+    if(adaptor.session) {
+        adaptor.session.hold(getSessionOptions(options), done);
+        debugSession('[hold] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+/**
+ * [unhold description]
+ * @param  {[type]} session [description]
+ * @param  {[type]} options [description]
+ *     useUpdate  Boolean Send UPDATE instead of re-INVITE
+ * @param  {[type]} done [description] 成功后的回调
+ * @return {[type]}         [description]
+ */
+function unhold(options, done) {
+    if(adaptor.session) {
+        adaptor.session.unhold(getSessionOptions(options), done);
+        debugSession('[unhold] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+
+
+
+/**
+ * Mutes the local audio and/or video.
+ * @param  {[type]} session [description]
+ * @param  {[type]} options [description]
+ *     audio.  Boolean Determines whether local audio must be muted
+ *     video.  Boolean Determines whether local video must be muted
+ * @return {[type]}         [description]
+ */
+function mute(options) {
+    if(adaptor.session) {
+        adaptor.session.mute(options);
+        debugSession('[mute] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+/**
+ * UnMutes the local audio and/or video.
+ * @param  {[type]} session [description]
+ * @param  {[type]} options [description]
+ *     audio.  Boolean Determines whether local audio must be muted
+ *     video.  Boolean Determines whether local video must be muted
+ * @return {[type]}         [description]
+ */
+function unmute(options) {
+    if(adaptor.session) {
+        adaptor.session.unmute(options);
+        debugSession('[unmute] %O',{
+            session: adaptor.session,
+            options: options
+        });
+    }
+}
+/**
+ * @param  {Number or String} 符合DTMF标准的   eg.  sendDigit(4) or sendDigit("1234#")
+ */
+function sendDigit(tone) {
+    if(adaptor.session) {
+        adaptor.session.sendDTMF(tone);
+        debugSession('[sendDigit] %O',{
+            session: adaptor.session,
+            tone: tone
+        });
+    }
+}
+
+
+
+
+
 
 /* Emitter */
 // ==========
@@ -28840,7 +28421,7 @@ function login(options) {
 //  'warning',//提示用户重启浏览器  
 //  'jitterbuffer' //拨号中上报延迟信息
 var EVENTS_CUSTOM = {};
-function addEventMethod(eventType, eventHandle, scope) {
+function addEvent(eventType, eventHandle, scope) {
     if (typeof eventType === 'string') {
         EVENTS_CUSTOM[eventType] = function() {
             eventHandle.apply(scope, Array.prototype.slice.call(arguments));
@@ -28860,290 +28441,5 @@ function fireEvent(eventType, options) {
         EVENTS_CUSTOM[eventType](eventType, options);
     }
 }
-
-/*UA Event */
-// ===== 
-// 连接中  ua.on('connecting', onConnecting);
-function onConnecting(data){
-    debug('[onConnecting] %O', {
-        data: data
-    });
-}
-// 连接成功 ua.on('connected', onConnected);
-function onConnected(data){
-    this.connected = true;
-    this.reconnect = 0;
-    this.callingReconnect = false;
-    debug('[onConnected] %O', {
-        data: data
-    });
-}
-// 连接失败 ua.on('disconnected', onDisconnected);
-function onDisconnected(data){
-    this.status = C.STATUS_FAIL;
-    data = data || {};
-    var ua = this.ua || {};
-    debug('[onDisconnected] %O', {
-        data: data,
-        socket: data.socket,
-        status: ua.status,
-        ua: ua
-    });
-
-    try {
-        // ①若连接成功过之后未连接成功  ②_uaConnectError 避免重复执行 ③ 避免服务器高并发请求集结做缓冲
-        var isValidConnect = !this._timestampConnect || (Math.abs(Date.now() - this._timestampConnect)/1000 > 1);
-        if(data.error && this._uaConnectError && this._connected && isValidConnect) {
-            this._uaConnectError = 0;
-            this._timestampConnect = Date.now();
-            ua.start();
-        }
-    } catch (e) {
-        debug('[disconnectError]: %O', e );
-    }
-}
-// 注册成功 ua.on('registered', onRegistered);
-function onRegistered(data){
-    this.status = C.STATUS_SUCCESS;
-     debug('[onRegistered] %O', {
-        data: data
-    });
-}
-// 注册注销 ua.on('unregistered', onUnregistered);
-function onUnregistered(data){
-    this.status = C.STATUS_FAIL;
-     debug('[onUnregistered] %O', {
-        data: data
-    });
-
-}
-// 注册失败  ua.on('registrationFailed', onRegistrationFailed);
-function onRegistrationFailed(data){
-    this.status = C.STATUS_FAIL;
-    debug('[onRegistrationFailed] %O', {
-        data: data
-    });
-
-    var ua = this.ua;
-    if(!ua) { return ;}
-    // 连接状态  请求超时pending、响应超时 408、410、420、480  UNAVAILABLE 
-    // var isResistered = ua.isRegistered(); // 是否有注册成功过
-    var isConnected = ua.isConnected();
-
-    /* 连接状态 请求超时 */
-    var isResponseTimeout = data.cause && data.cause === 'UNAVAILABLE';
-    var isRequestTimeout = data.cause && data.cause === 'Request Timeout';
-    var isConnectTimeOut = isRequestTimeout || isResponseTimeout;
-    // 若是响应超时避免服务器集结压力过大做时间缓冲, 区间为5s
-    var isValidRegister = !this.timestampRegister || (Math.abs(Date.now() - this.timestampRegister)/1000 > 5);
-    if(isConnected && isConnectTimeOut && isValidRegister ) {
-        this.timestampRegister = Date.now();
-        debug('ws服务注册失败-重试');
-        ua.register();// 未注册成功过 或 注册成功过isResistered 则关闭 一个周期仅触发一次 ua.registered  ua.registrator.close();
-    } else {
-        var isConnectError = data.cause && data.cause === 'Connection Error';
-        this.uaConnectError = isConnectError;
-        debug('ws服务注册失败-重连 连接错误 %s', isConnectError);
-    }
-}
-
-// 获取电话，注册电话事件 ua.on('registrationFailed', onNewRTCSession);
-function onNewRTCSession(data){
-    if (data.originator === 'local') { return; }
-    debug('[onNewRTCSession] %O', {
-        data: data
-    });
-    var _session = data.session;
-    // Avoid if busy or other incoming
-    if (this.session) {
-        debug('[terminate] %O', { // debug
-            status_code: 486,
-            reason_phrase: 'Busy Here',
-            session: _session
-        });
-
-        _session.terminate({
-            status_code: 486,
-            reason_phrase: 'Busy Here'
-        });
-        return;
-    } 
-    this.session = _session;
-
-    fireEvent('ringing', {
-        type: data.request.hasHeader('Direction-Type') ? Number(data.request.getHeader('Direction-Type')) : 1
-    });
-
-    _session.on('accepted', function() {
-            // window.document.getElementById('qiyuPhone') idSelector
-        var nodePhone = window.document && (nodePhone = window.document.getElementById(this._configration.media_selectorId));
-        if (nodePhone) {
-            // Display remote stream
-            nodePhone.srcObject = _session.connection.getRemoteStreams()[0];
-        }
-        // stats.startStats(session.connection);
-    });
-    _session.on('ended', function() {
-        debug('jssip:ended');
-
-        // stats.stopStats();
-        this.session = null;
-    });
-    _session.on('failed', function() {
-        debug('jssip:failed');
-        // stats.stopStats();
-        this.session = null;
-    });
-}
-
-/* UA Methods */
-function connect () {
-      if(this.ua) {
-        this.ua.start();
-    }
-      debug('connect %s', getStackTrace());
-  }
-function disConnect () {
-    if(this.ua) {
-        this.ua.stop();
-    }
-    debug('disConnect %s', getStackTrace());
-  }
-function accept() {
-    var adaptor = this;
-    var hasAccept = false;//是否接起过
-    var _configration = adaptor._configration;
-    var answerOptions = _configration.session; //media.pcConfig;
-
-    // 重试机制白名单：3次重试
-    // var someCode = ['7','ipcc1213','gamesbluebc','wmccs','yimutian','7daichina','5050sgmw','siji','bluebc'];//这里的企业，在接起时获取媒体设备，如果没有返回，增加重试机制
-    var retryCount = 0;//重试次数
-    var retryTimer = null; //重试定时器
-
-    var  retryCorpWhiteList = _configration.meida_whitelist || []; //_configration.meida.whitelist;
-    var  TheCorp = _configration.corpCode;
-
-    debug('accept corpCode:%s', TheCorp);
-    if (retryCorpWhiteList.includes(TheCorp)) {
-        retryGetUserMedia();
-    } else {// 非白名单直接接听处理 // 非someCode里定义的企业保持原有的逻辑
-        if(adaptor.session){
-            answer(adaptor.session, answerOptions);
-        }
-    }
-
-    function retryGetUserMedia() {
-        retryCount++;
-        retryTimer = null;
-
-        debug('retry retryCount:%d', retryCount);
-
-        //重试次数小于3次时，起一个定时器，如果navigator.mediaDevices.getUserMedia没有返回，定时器触发，重试。
-        if (retryCount < 3){ 
-            retryTimer = setTimeout(retryGetUserMedia, 200);
-        }
-
-        try{
-            navigator.mediaDevices.getUserMedia({audio: true, video: false}).then(function(stream) {
-                clearTimeout(retryTimer);
-                debug('getUserMedia success hasAccept:%d', Number(hasAccept));
-
-                if(!hasAccept){//防止多次调用：如果navigator.mediaDevices.getUserMedia返回就是很慢，三次重试过了，然后同时返回成功，此时防止接起多次
-                    answerOptions.mediaStream = stream;
-                    answer(adaptor.session, answerOptions);
-                    hasAccept = true;
-                }
-
-            }).catch(function(error) {
-                debug('getUserMedia failed %O', error);
-            });
-        }catch(e){
-            console.log(e);
-        }
-    }
-}
-
-
-
-/**
- * @param  {String} 呼叫目标
- * @param  {Object} options 可选的扩展对象
- */
-function call(target, options) {
-    return this.ua.call(target, deepmerge(options || {}, {
-        extraHeaders: this.ua.__extraHeaders.slice()
-    }));
-}
-/**
- * @param  {Obejct} 可选参数用于以后扩展
- */
-function answer(session, options) {
-    session.answer(deepmerge(options || {}, {
-        extraHeaders: this.ua.__extraHeaders.slice()
-    }));
-}
-
-function bye(session, options) {
-    session.terminate(deepmerge(options || {}, {
-        extraHeaders: this.ua.__extraHeaders.slice()
-    }));
-}
-/**
- * [hold description]
- * @param  {[type]} session [description]
- * @param  {[type]} options [description]
- *     useUpdate  Boolean Send UPDATE instead of re-INVITE
- * @param  {[type]} done [description] 成功后的回调
- * @return {[type]}         [description]
- */
-function hold(session, options, done) {
-    session.hold(deepmerge(options || {}, {
-        extraHeaders: this.ua.__extraHeaders.slice()
-    }), done);
-}
-/**
- * [unhold description]
- * @param  {[type]} session [description]
- * @param  {[type]} options [description]
- *     useUpdate  Boolean Send UPDATE instead of re-INVITE
- * @param  {[type]} done [description] 成功后的回调
- * @return {[type]}         [description]
- */
-function unhold(session, options, done) {
-    session.unhold(deepmerge(options || {}, {
-        extraHeaders: this.ua.__extraHeaders.slice()
-    }), done);
-}
-
-
-
-/**
- * Mutes the local audio and/or video.
- * @param  {[type]} session [description]
- * @param  {[type]} options [description]
- *     audio.  Boolean Determines whether local audio must be muted
- *     video.  Boolean Determines whether local video must be muted
- * @return {[type]}         [description]
- */
-function mute(session, options) {
-    session.mute(options);
-}
-/**
- * UnMutes the local audio and/or video.
- * @param  {[type]} session [description]
- * @param  {[type]} options [description]
- *     audio.  Boolean Determines whether local audio must be muted
- *     video.  Boolean Determines whether local video must be muted
- * @return {[type]}         [description]
- */
-function unmute(session, options) {
-    session.unmute(options);
-}
-/**
- * @param  {Number or String} 符合DTMF标准的   eg.  sendDigit(4) or sendDigit("1234#")
- */
-function sendDigit(session, tone) {
-    session.sendDTMF(tone);
-}
-},{"../package.json":59,"debugwebrtc":3,"deepmerge":4,"qiyujssip":18}]},{},[60])(60)
+},{"../package.json":54,"./Config.js":55,"deepmerge":3,"qiyujssip":13}]},{},[56])(56)
 });
