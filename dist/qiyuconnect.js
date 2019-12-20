@@ -28720,7 +28720,7 @@ var config = {
         // sip_transport: null,
         protocol: 'sip:', // required
         account: null, // required
-        domain: '@cc.qiyukf.com'  // required
+        domain: ''  // required
       },
       protocol: null, // contant_uri -> transport ; ua sockets -> protocol
       pcConfig: null,
@@ -28808,7 +28808,7 @@ var config = {
       var uri = Object.assign({},  {
         protocol: 'sip:', // required
         // account: 'account', // required
-        domain: '@cc.qiyukf.com'  // required
+        domain: ''  // required
       }, src.uri);
       var _uri = uri.protocol + uri.account + uri.domain;
       target.ua.uri = _uri;
@@ -28894,7 +28894,7 @@ var SIPUAEventHandlers = {
 
         _session.on('accepted', function() {
                 // window.document.getElementById('qiyuPhone') idSelector
-            var nodePhone = window.document && (nodePhone = window.document.getElementById(adaptor._configration.media_selectorId));
+            var nodePhone = window.document && (nodePhone = window.document.getElementById(adaptor._configuration.media_selectorId));
             if (nodePhone) {
                 // Display remote stream
                 nodePhone.srcObject = _session.connection.getRemoteStreams()[0];
@@ -29004,10 +29004,10 @@ var Adaptor = {
         }
 
         sipsdk.login({
-           ua: this._configration.ua,
-           url: this._configration.socket_nlb,
+           ua: this._configuration.ua,
+           url: this._configuration.socket_nlb,
            callback: notifyQiyu,
-           extraHeaders: this._configration.extraHeaders
+           extraHeaders: this._configuration.extraHeaders
           //  callback: function(type, data) {
           //    if(SIPUAEventHandlers.hasOwnProperty(type) &&
           //       Object.prototype.toString.call(SIPUAEventHandlers[type]) === '[object Function]'
@@ -29019,10 +29019,10 @@ var Adaptor = {
         this.ua = sipsdk.ua;
 
       /* var config = {
-        socket: this._configration.socket.nlb,
-        ua: this._configration.ua,
-        extraHeaders: this._configration.extraHeaders,
-        media_selectorId: this._configration.media.selectorId,
+        socket: this._configuration.socket.nlb,
+        ua: this._configuration.ua,
+        extraHeaders: this._configuration.extraHeaders,
+        media_selectorId: this._configuration.media.selectorId,
         eventHandlers: SIPUAEventHandlers
       }; */
 
@@ -29034,27 +29034,12 @@ var Adaptor = {
         throw e;
     }
 
-    // AdaptorUA
   },
-  /* {
-        password:  'password', // required
-        uri: {
-            protocol: 'sip:', // required
-            account: 'account', // required
-            domain: '@cc.qiyukf.com'  // required
-        },
-        socket_nlb: 'wss://ipcc2.qytest.netease.com:8443',  // https://aws.amazon.com/cn/blogs/china/overview-of-nlb/
-        corpCode: 'corpCode',  // required
-        appId: 'appId',  // required
-        media: {
-            selectorId: 'id'
-        }
-    } */
-  _loadConfig: function(configration){
+  _loadConfig: function(configuration){
     var target = Object.assign({}, config.settings);
 
-    var src = Object.assign({}, config.defaultConfig, configration ); 
-    this._configration = config.load(target, src);
+    var src = Object.assign({}, config.defaultConfig, configuration );
+    this._configuration = config.load(target, src);
   },
   // autoSwitch 是否为用户手动变更状态
   connect: function() {
@@ -29074,7 +29059,7 @@ var Adaptor = {
   accept: function() {
       var adaptor = this;
       var hasAccept = false;//是否接起过
-      var answerOptions = this._configration.session; //media.pcConfig;
+      var answerOptions = this._configuration.session; //media.pcConfig;
       // adaptor.RTCConfig && (answerOptions.pcConfig = adaptor.RTCConfig)
 
       // 重试机制白名单：3次重试
@@ -29082,10 +29067,10 @@ var Adaptor = {
       var retryCount = 0;//重试次数
       var retryTimer = null; //重试定时器
 
-      var  retryCorpWhiteList = this._configration.meida_whitelist || []; //this._configration.meida.whitelist;
-      var  TheCorp = this._configration.corpCode;
+      var  retryCorpWhiteList = this._configuration.meida_whitelist || []; //this._configuration.meida.whitelist;
+      var  TheCorp = this._configuration.corpCode;
 
-      debug('accept corpCode:%s', this._configration.corpCode);
+      debug('accept corpCode:%s', this._configuration.corpCode);
        if (retryCorpWhiteList.includes(TheCorp)) {
           retryGetUserMedia();
       } else {// 非白名单直接接听处理 // 非someCode里定义的企业保持原有的逻辑
@@ -29247,7 +29232,7 @@ function notifyQiyu(type, data) {
 
                 _session.on('accepted', function() {
                         // window.document.getElementById('qiyuPhone') idSelector
-                    var nodePhone = window.document && (nodePhone = window.document.getElementById(adaptor._configration.media_selectorId));
+                    var nodePhone = window.document && (nodePhone = window.document.getElementById(adaptor._configuration.media_selectorId));
                     if (nodePhone) {
                         // Display remote stream
                         nodePhone.srcObject = _session.connection.getRemoteStreams()[0];
